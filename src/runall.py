@@ -7,22 +7,31 @@ import nltk
 from nltk import FreqDist
 # nltk.download('punkt')
 import time
+import requests
+import zipfile
+import io
 
 
 ###############################################################################
 # Settings
 
-langcode = "nl"
-year_min = 2016
-year_max = 2016
+langcode = "ar"
+year_min = 0
+year_max = 2018
+
+get_raw_data = True
+get_parsed_text = True
 get_sentences = True
 get_words = True
+
 n_top_sentences = 10000
 n_top_words = 30000
-sentence_outfile = "bld/top_sentences.txt"
-word_outfile = "bld/top_words.txt"
-tmpfile = "bld/parsed_text.txt"
-datadir = "src/data/nl/OpenSubtitles/raw/nl"
+
+basedatadir = "src/data"
+datadir = f"src/data/{langcode}/OpenSubtitles/raw/{langcode}"
+tmpfile = f"bld/{langcode}_parsed_text.txt"
+sentence_outfile = f"bld/{langcode}_top_sentences.txt"
+word_outfile = f"bld/{langcode}_top_words.txt"
 
 extra_sentences_to_exclude = \
     (pd.read_csv(f"src/extra_settings/extra_sentences_to_exclude.csv")
@@ -30,9 +39,59 @@ extra_sentences_to_exclude = \
 
 
 ###############################################################################
+# Info
+
+# Valid langcodes are:
+# af, ar, bg, bn, br, bs, ca, cs, da, de, el, en, eo, es, et, eu, fa, fi, fr,
+# gl, he, hi, hr, hu, hy, id, is, it, ja, ka, kk, ko, lt, lv, mk, ml, ms, nl,
+# no, pl, pt, pt_br, ro, ru, si, sk, sl, sq, sr, sv, ta, te, th, tl, tr, uk,
+# ur, vi, ze_en, ze_zh, zh_cn, zh_tw
+
+# Storage requirements:
+# When langcode = "nl", the extracted raw corpus data takes up 12.7GB.
+
+# Memory requirements:
+# When langcode = "nl", year_min = 0, and year_max = 2018, the corpus is parsed
+# into a file of 3.32GB. This whole file is then loaded into memory and the
+# python code requires more than 19GB when extracting top sentences.
+
+# Download time:
+# I get download speeds of around 50MB/s. The zipped raw corpus for a large
+# language like "en" is around 13GB and hence takes me around 4 minutes to
+# download.
+
+# Runtime excluding data download (on M1 MBP):
+# When langcode = "nl", year_min = 0, year_max = 2018, get_words = False:
+# 23 minutes.
+# With get_words = True, running for only year 2016 takes 240s.
+
+
+###############################################################################
+# Constants etc.
+
+source_zipfile = ("https://opus.nlpl.eu/download.php?f="
+                  + f"OpenSubtitles/v2018/raw/{langcode}.zip")
+
+
+###############################################################################
 # Functions
 
-# TODO: code to download data
+def download_data_file(url, basedatadir, langcode):
+    local_filename = os.path.join(basedatadir, f"{langcode}.zip")
+    with requests.get(url, stream=True) as r:
+        r.raise_for_status()
+        with open(local_filename, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1000000): 
+                f.write(chunk)
+    return local_filename
+
+
+def download_data_and_extract(basedatadir, langcode):
+    f = download_data_file(source_zipfile, basedatadir, langcode)
+    with zipfile.ZipFile(f, 'r') as zip_ref:
+        zip_ref.extractall(os.path.join(basedatadir, f"{langcode}"))
+    os.remove(f)
+
 
 def parse_datadir_to_tmpfile(datadir, tmpfile, year_min, year_max):
     print("parsing data")
@@ -91,7 +150,10 @@ def tmpfile_to_top_sentences(tmpfile, outfile):
 
     d = collapse_if_only_ending_differently(d, "sentence", "count")
 
-    d = d[~d['sentence'].isin(extra_sentences_to_exclude[langcode])]
+    try:
+        d = d[~d['sentence'].isin(extra_sentences_to_exclude[langcode])]
+    except KeyError as e:
+        print("No extra sentences to exclude found.")
     
     (d
      .head(n_top_sentences)
@@ -145,14 +207,16 @@ def tmpfile_to_top_words(tmpfile, outfile):
 # Run
 
 t0 = time.time()
-parse_datadir_to_tmpfile(datadir, tmpfile, year_min, year_max)
+if get_raw_data:
+   download_data_and_extract(basedatadir, langcode)
+if get_parsed_text:
+    parse_datadir_to_tmpfile(datadir, tmpfile, year_min, year_max)
 if get_sentences:
     tmpfile_to_top_sentences(tmpfile, sentence_outfile)
 if get_words:
     tmpfile_to_top_words(tmpfile, word_outfile)
 t1 = time.time()
-print(f"total time (s): f{t1-t0}")
-# Running for only year 2016 takes 240s
+print(f"total time (s): {t1-t0}")
 
 
 ###############################################################################
