@@ -3,6 +3,7 @@
 import os
 import pandas as pd
 import itertools
+from collections import Counter
 import nltk
 from nltk import FreqDist
 # nltk.download('punkt')
@@ -10,19 +11,26 @@ import time
 import requests
 import zipfile
 import io
+import sys
+import re
 
+if not os.path.isdir('src'):
+    os.chdir("..")
 
 ###############################################################################
 # Settings
 
-langcode = "ar"
-year_min = 0
-year_max = 2018
+langcode = "fr" # nl, fr, es
+year_min = 2017 # lowest: 0
+year_max = 2018 # largest: 2018
 
 get_raw_data = True
 get_parsed_text = True
 get_sentences = True
-get_words = True
+get_words = False
+
+min_count = 5
+lines_per_chunk = 10000000
 
 n_top_sentences = 10000
 n_top_words = 30000
@@ -61,9 +69,9 @@ extra_sentences_to_exclude = \
 # download.
 
 # Runtime excluding data download (on M1 MBP):
-# When langcode = "nl", year_min = 0, year_max = 2018, get_words = False:
-# 23 minutes.
-# With get_words = True, running for only year 2016 takes 240s.
+# When langcode = "nl", year_min = 0, year_max = 2018:
+# 4 minutes with get_words = False.
+# 1h26min with get_words = True.
 
 
 ###############################################################################
@@ -125,28 +133,53 @@ def parse_xmlfile(infile):
     for line in fin.readlines():
         if not (line.startswith('<')):
             if not (line.startswith(' ')):
-                text += line                
+                text += line.strip(" -\n\t") + "\n"
     fin.close()
     return text
 
 
 def tmpfile_to_top_sentences(tmpfile, outfile):
     print("getting top sentences")
-    with open(tmpfile, 'r') as file:
-        lines = file.read().splitlines()
+    # Chunking is faster once the tmpfile is too large to fit in RAM
+    # and only slightly slower when it fits in RAM.
+    # The below section takes around 5min with 'es' and all years.
+    with open(tmpfile, 'br') as f:
+        nlines = sum(1 for i in f)
+        print(f"processing {nlines} lines...")
+    d = Counter()
+    chunks_done = 0
+    with open(tmpfile, 'r') as f:    
+        for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
+                                           fillvalue=""):
+            d += Counter(lines)
+            chunks_done += 1
+            print(f"{chunks_done * lines_per_chunk} lines done")
+
+    # remove empty entries
+    d.pop("", None)
+    d.pop(None, None)
+
+    # remove punctuation and numbers
+    punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
+    d = Counter({k:v for (k, v) in d.items() if not
+                 re.match(punctuation_and_numbers_regex, k)})
+
+    total_count = sum(d.values())
     
-    d = pd.DataFrame(lines, columns=["sentence"])
-    d = d.groupby(['sentence'])['sentence'].count()
-    d = d.sort_values(ascending=False)
-    d = d.to_frame(name="count").reset_index()
+    # remove less common items to save memory
+    if not (min_count == None or min_count == 0):
+        d = Counter({key:value for key, value in d.items()
+                      if value >= min_count})
 
-    d['sentence'] = d['sentence'].str.replace("^- ", "" , regex=True)
-    d['sentence'] = d['sentence'].str.replace("^-", "" , regex=True)
-    d['sentence'] = d['sentence'].str.strip()
+    # "/n" is still at the end of every sentence
+    d = Counter({k.strip(): v for (k, v) in d.items()})
+    # this takes the same time as instead running below:
+    # d['sentence'] = d['sentence'].str.strip()
 
-    d = d.groupby(['sentence'])['count'].sum()
-    d = d.sort_values(ascending=False)
-    d = d.to_frame(name="count").reset_index()
+    # TODO try doing everything in a dictionary instead of using pandas
+    d = pd.DataFrame(d.most_common(), columns=['sentence', 'count'])
+    d['count'] = pd.to_numeric(d['count'], downcast="unsigned") # saves ~50% memory
+    d = d.astype({"sentence":"string[pyarrow]"}) # saves ~66% memory
 
     d = collapse_if_only_ending_differently(d, "sentence", "count")
 
@@ -159,11 +192,11 @@ def tmpfile_to_top_sentences(tmpfile, outfile):
      .head(n_top_sentences)
      .to_csv(outfile, index=False))
 
-
+    
 def collapse_if_only_ending_differently(df, sentence, count):
     return (df
             .sort_values(by=[count], ascending=False)
-            .assign(Sm1=df[sentence].str[:-1])
+            .assign(Sm1=df[sentence].str.strip(" .?!¿¡"))
             .groupby('Sm1', as_index=False)
             .agg({sentence:'first', count:'sum'})
             .drop(columns=['Sm1'])
@@ -180,28 +213,54 @@ def collapse_case(df, word, count):
             .drop(columns=['Slow'])
             .sort_values(by=[count], ascending=False)
             .reset_index(drop=True))
-    
+
 
 def tmpfile_to_top_words(tmpfile, outfile):
     print("getting top words")
-    with open(tmpfile, 'r') as file:
-        lines = file.read().splitlines()
-    d = map(nltk.word_tokenize, lines)
-    d = (pd.DataFrame({'word': itertools.chain.from_iterable(d)})
-         .value_counts()
-         .reset_index(name="count"))
+    with open(tmpfile, 'br') as f:
+        nlines = sum(1 for i in f)
+        print(f"processing {nlines} lines...")
+    d = Counter()
+    chunks_done = 0
+    with open(tmpfile, 'r') as f:            
+        for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
+                                           fillvalue=""):
+            dt = map(nltk.word_tokenize, lines)
+            d += Counter(itertools.chain.from_iterable(dt))
+            chunks_done += 1
+            print(f"{chunks_done * lines_per_chunk} lines done")
+            # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
+        del dt
 
+    # remove empty entries
+    d.pop("", None)
+    d.pop(None, None)
+
+    # remove punctuation and numbers
+    punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
+    d = Counter({k:v for (k, v) in d.items() if not
+                 re.match(punctuation_and_numbers_regex, k)})
+
+    total_count = sum(d.values())
+    
+    # remove less common items to save memory
+    if not (min_count == None or min_count == 0):
+        d = Counter({key:value for key, value in d.items()
+                      if value >= min_count})
+
+    d = pd.DataFrame(d.most_common(), columns=['word', 'count'])
+    d['count'] = pd.to_numeric(d['count'], downcast="unsigned") # saves ~50% memory
+    d = d.astype({"word":"string[pyarrow]"}) # saves ~66% memory
+    
     d = collapse_case(d, "word", "count")
     
-    punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
-    d = d[~d.word.str.contains(punctuation_and_numbers_regex)]
-
     #TODO add more cleaning steps from google-books-ngram-frequency repo
+    #e.g. remove leading punctuation (important for Spanish)
     
     (d
      .head(n_top_words)
      .to_csv(outfile, index=False))
-    
+
 
 ###############################################################################
 # Run
@@ -222,7 +281,13 @@ print(f"total time (s): {t1-t0}")
 ###############################################################################
 # Misc
 
-# import time
+# # method 0
+# t0 = time.time()
+# dt = map(nltk.word_tokenize, lines[0:1000000])
+# dt = Counter(itertools.chain.from_iterable(dt))
+# t1 = time.time()
+# total0 = t1-t0
+# # 40s    
 
 # # method 1
 # t0 = time.time()
@@ -232,6 +297,7 @@ print(f"total time (s): {t1-t0}")
 #       .reset_index(name="count"))
 # t1 = time.time()
 # total1 = t1-t0
+# # 40s
 
 # # method 2
 # t0 = time.time()
@@ -252,5 +318,6 @@ print(f"total time (s): {t1-t0}")
 # t1 = time.time()
 # total3 = t1-t0
 
-# method 2 and 3 take the same time and are around 3 times slower than 1
+# method 2 and 3 take the same time and are around 3 times slower than 1 and 0
 # with method 1, year 2017 takes around 100s
+
