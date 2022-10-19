@@ -14,27 +14,34 @@ import io
 import sys
 import re
 
-if not os.path.isdir('src'):
-    os.chdir("..")
 
 ###############################################################################
 # Settings
 
-langcode = "fr" # nl, fr, es
-year_min = 2017 # lowest: 0
+# subtitle language and years
+langcode = "nl" # nl, fr, es
+year_min = 0 # lowest: 0
 year_max = 2018 # largest: 2018
 
+# parts to run
 get_raw_data = True
 get_parsed_text = True
 get_sentences = True
 get_words = False
 
+# performance
 min_count = 5
 lines_per_chunk = 10000000
 
+# output settings
 n_top_sentences = 10000
 n_top_words = 30000
 
+# should run code from the repository base directory
+if not os.path.isdir('src'):
+    os.chdir("..")
+
+# paths and names
 basedatadir = "src/data"
 datadir = f"src/data/{langcode}/OpenSubtitles/raw/{langcode}"
 tmpfile = f"bld/{langcode}_parsed_text.txt"
@@ -56,7 +63,9 @@ extra_sentences_to_exclude = \
 # ur, vi, ze_en, ze_zh, zh_cn, zh_tw
 
 # Storage requirements:
-# When langcode = "nl", the extracted raw corpus data takes up 12.7GB.
+# Size of the extracted raw corpus data by langcode:
+# "nl": 12.7GB
+# "es": 27.1GB
 
 # Memory requirements:
 # When langcode = "nl", year_min = 0, and year_max = 2018, the corpus is parsed
@@ -178,7 +187,8 @@ def tmpfile_to_top_sentences(tmpfile, outfile):
 
     # TODO try doing everything in a dictionary instead of using pandas
     d = pd.DataFrame(d.most_common(), columns=['sentence', 'count'])
-    d['count'] = pd.to_numeric(d['count'], downcast="unsigned") # saves ~50% memory
+    d['count'] = pd.to_numeric(d['count'],
+                               downcast="unsigned") # saves ~50% memory
     d = d.astype({"sentence":"string[pyarrow]"}) # saves ~66% memory
 
     d = collapse_if_only_ending_differently(d, "sentence", "count")
@@ -249,7 +259,8 @@ def tmpfile_to_top_words(tmpfile, outfile):
                       if value >= min_count})
 
     d = pd.DataFrame(d.most_common(), columns=['word', 'count'])
-    d['count'] = pd.to_numeric(d['count'], downcast="unsigned") # saves ~50% memory
+    d['count'] = pd.to_numeric(d['count'],
+                               downcast="unsigned") # saves ~50% memory
     d = d.astype({"word":"string[pyarrow]"}) # saves ~66% memory
     
     d = collapse_case(d, "word", "count")
