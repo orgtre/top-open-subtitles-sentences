@@ -32,7 +32,7 @@ The [`word_tokenize`](https://www.nltk.org/api/nltk.tokenize.html) function of t
 This repository is based on the OpenSubtitles2018 corpus, which is part of the OPUS collection. In particular, as source files the untokenized corpus files linked in the rightmost column language IDs of the first table [here](https://opus.nlpl.eu/OpenSubtitles-v2018.php) are taken. These contain the raw corpus text as a collection of xml subtitle files, which have been downloaded from [www.opensubtitles.org](https://www.opensubtitles.org) (see also their newer site [www.opensubtitles.com](https://www.opensubtitles.com)). 
 
 [OpenSubtitles](https://www.opensubtitles.org) is an online community where anyone can upload and download subtitles. At the time of writing 6,404,981 subtitles are available, of these 3,735,070 are included in the [OpenSubtitles2018 corpus](https://opus.nlpl.eu/OpenSubtitles-v2018.php), which contains a total of 22.10 billion tokens. See the following article for a detailed description of the corpus:
-P. Lison and J. Tiedemann, 2016, [OpenSubtitles2016: Extracting Large Parallel Corpora from Movie and TV Subtitles](http://www.lrec-conf.org/proceedings/lrec2016/pdf/947_Paper.pdf). In Proceedings of the 10th International Conference on Language Resources and Evaluation (LREC 2016).
+> P. Lison and J. Tiedemann (2016) [OpenSubtitles2016: Extracting Large Parallel Corpora from Movie and TV Subtitles](http://www.lrec-conf.org/proceedings/lrec2016/pdf/947_Paper.pdf). In Proceedings of the 10th International Conference on Language Resources and Evaluation (LREC 2016).
 
 
 ## Related work
