@@ -10,21 +10,30 @@ import time
 import requests
 import zipfile
 import re
-
+import shutil
+import gzip
 
 ###############################################################################
 # Settings
 
-# subtitle languages and years
-langcodes = ["en"]   # see valid_langcodes
-year_min = 0   # lowest: 0
-year_max = 2018   # largest: 2018
+# languages (see valid_langcodes)
+langcodes = ["af"]
+
+# type of corpus data to use as source
+source_data_type = "raw"   # "raw", "text", "tokenized"
 
 # parts to run
-get_raw_data = True
+get_source_data = True
+redownload_source_data = False
 get_parsed_text = True
 get_sentences = True
 get_words = False
+delete_tmpfile = True
+delete_source_data = False
+
+# parsing settings (only in effect when source_data_type = "raw")
+year_min = 0   # lowest: 0
+year_max = 2018   # largest: 2018
 
 # performance
 download_chunk_size = 1000000
@@ -81,16 +90,34 @@ valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
 
 def source_zipfile(langcode):
-    return ("https://opus.nlpl.eu/download.php?f="
-            + f"OpenSubtitles/v2018/raw/{langcode}.zip")
+    if source_data_type == "raw":
+        return ("https://opus.nlpl.eu/download.php?f="
+                + f"OpenSubtitles/v2018/raw/{langcode}.zip")
+    if source_data_type == "text":
+        return ("https://opus.nlpl.eu/download.php?f=" +
+                f"OpenSubtitles/v2018/mono/OpenSubtitles.raw.{langcode}.gz")
+    if source_data_type == "tokenized":
+        return ("https://opus.nlpl.eu/download.php?f="
+                + f"OpenSubtitles/v2018/mono/OpenSubtitles.{langcode}.gz")
+    else:
+        raise Exception(f"Error: {source_data_type} not a valid " +
+                        "source_data_type.")
 
 basedatadir = "src/data"
 
-def datadir(langcode):
-    return f"{basedatadir}/{langcode}/OpenSubtitles/raw/{langcode}"
+def rawdatadir(langcode):
+    return f"{basedatadir}/{langcode}/raw"
+
+def parsedfile(langcode):
+    if source_data_type == "raw":
+        return f"bld/tmp/{langcode}_raw.txt"
+    if source_data_type == "text":
+        return f"src/data/{langcode}/{langcode}_text.txt"
+    if source_data_type == "tokenized":
+        return f"src/data/{langcode}/{langcode}_tokenized.txt"
 
 def tmpfile(langcode):
-    return f"bld/{langcode}_parsed_text.txt"
+    return f"bld/tmp/{langcode}_raw.txt"
 
 def sentence_outfile(langcode):
     return f"bld/{langcode}_top_sentences.txt"
@@ -108,14 +135,24 @@ def extra_sentences_to_exclude():
 
 def download_data_and_extract(basedatadir, langcode):
     print("Downloading data:")
+    if not os.path.exists(basedatadir):
+        os.makedirs(basedatadir)
     f = download_data_file(source_zipfile(langcode), basedatadir, langcode)
-    with zipfile.ZipFile(f, 'r') as zip_ref:
-        zip_ref.extractall(os.path.join(basedatadir, f"{langcode}"))
+    extension = os.path.splitext(f)[1]
+    if source_data_type in ["text", "tokenized"]:
+        with gzip.open(f, 'rb') as f_in:
+            with open(parsedfile(langcode), 'wb') as f_out:
+                shutil.copyfileobj(f_in, f_out)
+    else:
+        with zipfile.ZipFile(f, 'r') as zip_ref:
+            #zip_ref.extractall(os.path.join(basedatadir, f"{langcode}"))
+            zip_ref.extractall(os.path.join(basedatadir, f"{langcode}/raw"))
     os.remove(f)
 
 
 def download_data_file(url, basedatadir, langcode):
-    local_filename = os.path.join(basedatadir, f"{langcode}.zip")
+    extension = os.path.splitext(url)[1]
+    local_filename = os.path.join(basedatadir, f"{langcode}{extension}")
     with requests.get(url, stream=True) as r:
         r.raise_for_status()
         total_length = int(r.headers.get('content-length'))
@@ -133,24 +170,28 @@ def download_data_file(url, basedatadir, langcode):
     return local_filename
 
 
-def parse_datadir_to_tmpfile(datadir, tmpfile, year_min, year_max):
+def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
+                                year_min, year_max):
     print("Parsing data:")
     if os.path.exists(tmpfile):
         os.remove(tmpfile)
+    if not os.path.exists("bld/tmp"):
+        os.makedirs("bld/tmp")
+    yeardatadir = os.path.join(rawdatadir, f"OpenSubtitles/raw/{langcode}")
     fout = open(tmpfile, 'a')
-    for ydir in os.listdir(datadir):
+    for ydir in os.listdir(yeardatadir):
         try:
             if int(ydir) >= year_min and int(ydir) <= year_max:
                 print(f"   {ydir}")
                 outtext = ""
-                for mdir in os.listdir(os.path.join(datadir, ydir)):
+                for mdir in os.listdir(os.path.join(yeardatadir, ydir)):
                     #print("mdir: " + mdir)
-                    mdirfull = os.path.join(datadir, ydir, mdir)
+                    mdirfull = os.path.join(yeardatadir, ydir, mdir)
                     if os.path.isdir(mdirfull):
                         for fname in os.listdir(mdirfull):
                             if not fname.startswith('.'):
                                 #print(fname)
-                                fpathfull = os.path.join(datadir, ydir,
+                                fpathfull = os.path.join(yeardatadir, ydir,
                                                          mdir, fname)
                                 outtext += parse_xmlfile(fpathfull)
                 fout.write(outtext)
@@ -170,27 +211,33 @@ def parse_xmlfile(infile):
     return text
 
 
-def tmpfile_to_top_sentences(tmpfile, outfile, langcode):
+def parsedfile_to_top_sentences(parsedfile, outfile,
+                                langcode, source_data_type):
     print("Getting top sentences:")
     # Chunking is faster once the tmpfile is too large to fit in RAM
     # and only slightly slower when it fits in RAM.
     # The below section takes around 5min with 'es' and all years.
-    with open(tmpfile, 'br') as f:
+    if not os.path.exists("bld"):
+        os.makedirs("bld")
+    with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
         print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
-    with open(tmpfile, 'r') as f:    
+    with open(parsedfile, 'r') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
+            if source_data_type != "raw":
+                lines = [l.strip(" -\n\t") for l in lines]
             d += Counter(lines)
             chunks_done += 1
-            print(f"   {chunks_done * min(nlines, lines_per_chunk)} lines done")
+            print(f"   {chunks_done * min(nlines, lines_per_chunk)} " +
+                  "lines done")
 
     # remove empty entries
-    d.pop("", None)
     d.pop(None, None)
-
+    d.pop("", None)
+    
     # remove punctuation and numbers
     punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
     d = Counter({k:v for (k, v) in d.items() if not
@@ -205,7 +252,8 @@ def tmpfile_to_top_sentences(tmpfile, outfile, langcode):
                       if value >= min_count})
 
     # "/n" is still at the end of every sentence
-    d = Counter({k.strip(): v for (k, v) in d.items()})
+    if source_data_type == "raw":
+        d = Counter({k.strip(): v for (k, v) in d.items()})
     # this takes the same time as instead running below:
     # d['sentence'] = d['sentence'].str.strip()
 
@@ -238,20 +286,27 @@ def collapse_if_only_ending_differently(df, sentence, count):
             .reset_index(drop=True))
 
 
-def tmpfile_to_top_words(tmpfile, outfile):
+def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
     print("Getting top words:")
-    with open(tmpfile, 'br') as f:
+    if not os.path.exists("bld"):
+        os.makedirs("bld")
+    with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
         print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
-    with open(tmpfile, 'r') as f:            
+    with open(parsedfile, 'r') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
-            dt = map(nltk.word_tokenize, lines)
+            if source_data_type != "raw":
+                dt = map(lambda l:
+                         nltk.word_tokenize(l.strip(" -\n\t")), lines)
+            else:
+                dt = map(nltk.word_tokenize, lines)
             d += Counter(itertools.chain.from_iterable(dt))
             chunks_done += 1
-            print(f"   {chunks_done * min(nlines, lines_per_chunk)} lines done")
+            print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
+                  + "lines done")
             # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
             # TODO parallelize
         del dt
@@ -259,7 +314,7 @@ def tmpfile_to_top_words(tmpfile, outfile):
     # remove empty entries
     d.pop("", None)
     d.pop(None, None)
-
+    
     # remove punctuation and numbers
     punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
     d = Counter({k:v for (k, v) in d.items() if not
@@ -280,7 +335,6 @@ def tmpfile_to_top_words(tmpfile, outfile):
     d = collapse_case(d, "word", "count")
     
     #TODO add more cleaning steps from google-books-ngram-frequency repo
-    #e.g. remove leading punctuation (important for Spanish)
     
     (d
      .head(n_top_words)
@@ -297,21 +351,47 @@ def collapse_case(df, word, count):
             .sort_values(by=[count], ascending=False)
             .reset_index(drop=True))
     
-        
-def run_one_langcode(langcode):    
+
+def run_one_langcode(langcode, source_data_type):
     t0 = time.time()
     check_cwd()
     print("\nLanguage:", langcode)
-    if get_raw_data:
-        download_data_and_extract(basedatadir, langcode)
-    if get_parsed_text:
-        parse_datadir_to_tmpfile(datadir(langcode), tmpfile(langcode),
-                                 year_min, year_max)
+    if get_source_data:
+        if ((source_data_type == "raw" and
+            (not os.path.exists(rawdatadir(langcode))
+             or redownload_source_data)) or
+            (source_data_type != "raw" and
+             (not os.path.exists(parsedfile(langcode))
+              or redownload_source_data))):
+            download_data_and_extract(basedatadir, langcode)
+    if get_parsed_text and source_data_type == "raw":
+        parse_rawdatadir_to_tmpfile(langcode, rawdatadir(langcode),
+                                    tmpfile(langcode),
+                                    year_min, year_max)
     if get_sentences:
-        tmpfile_to_top_sentences(tmpfile(langcode), sentence_outfile(langcode),
-                                 langcode)
+
+        parsedfile_to_top_sentences(parsedfile(langcode),
+                                    sentence_outfile(langcode),
+                                    langcode, source_data_type)
     if get_words:
-        tmpfile_to_top_words(tmpfile(langcode), word_outfile(langcode))
+        parsedfile_to_top_words(parsedfile(langcode),
+                                word_outfile(langcode),
+                                source_data_type)
+    if delete_tmpfile:
+        if os.path.exists(tmpfile(langcode)):
+            os.remove(tmpfile(langcode))
+            if not os.listdir("bld/tmp"):
+                os.rmdir(f"bld/tmp")
+    if delete_source_data:
+        if source_data_type == "raw":
+            if os.path.exists(rawdatadir(langcode)):
+                shutil.rmtree(rawdatadir(langcode))
+        else:
+            if os.path.exists(parsedfile(langcode)):
+                os.remove(parsedfile(langcode))
+        if os.path.exists(f"basedatadir/{langcode}"):
+            if not os.listdir(f"basedatadir/{langcode}"):
+                os.rmdir(f"basedatadir/{langcode}")
     t1 = time.time()
     print(f"Total time (s): {t1-t0:.1f}\n")
 
@@ -337,7 +417,7 @@ def check_langcodes():
 def main():
     check_langcodes()
     for langcode in langcodes:        
-        run_one_langcode(langcode)
+        run_one_langcode(langcode, source_data_type)
 
         
 ###############################################################################
