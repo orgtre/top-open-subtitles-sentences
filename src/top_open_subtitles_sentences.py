@@ -27,9 +27,11 @@ get_source_data = True
 redownload_source_data = False
 get_parsed_text = True
 get_sentences = True
-get_words = False
+get_words = True
+get_words_using_tokenized = True
 delete_tmpfile = True
-delete_source_data = False
+delete_source_data = True
+always_keep_raw_data = True
 
 # parsing settings (only in effect when source_data_type = "raw")
 year_min = 0   # lowest: 0
@@ -89,7 +91,7 @@ valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
 
-def source_zipfile(langcode):
+def source_zipfile(langcode, source_data_type):
     if source_data_type == "raw":
         return ("https://opus.nlpl.eu/download.php?f="
                 + f"OpenSubtitles/v2018/raw/{langcode}.zip")
@@ -108,7 +110,7 @@ basedatadir = "src/data"
 def rawdatadir(langcode):
     return f"{basedatadir}/{langcode}/raw"
 
-def parsedfile(langcode):
+def parsedfile(langcode, source_data_type):
     if source_data_type == "raw":
         return f"bld/tmp/{langcode}_raw.txt"
     if source_data_type == "text":
@@ -133,15 +135,16 @@ def extra_sentences_to_exclude():
 ###############################################################################
 # Functions
 
-def download_data_and_extract(basedatadir, langcode):
+def download_data_and_extract(basedatadir, langcode, source_data_type):
     print("Downloading data:")
     if not os.path.exists(basedatadir):
         os.makedirs(basedatadir)
-    f = download_data_file(source_zipfile(langcode), basedatadir, langcode)
+    f = download_data_file(source_zipfile(langcode, source_data_type),
+                           basedatadir, langcode)
     extension = os.path.splitext(f)[1]
     if source_data_type in ["text", "tokenized"]:
         with gzip.open(f, 'rb') as f_in:
-            with open(parsedfile(langcode), 'wb') as f_out:
+            with open(parsedfile(langcode, source_data_type), 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
     else:
         with zipfile.ZipFile(f, 'r') as zip_ref:
@@ -298,18 +301,21 @@ def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
     with open(parsedfile, 'r') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
-            if source_data_type != "raw":
+            if source_data_type == "raw":
+                dt = map(nltk.word_tokenize, lines)            
+            elif source_data_type == "text":
                 dt = map(lambda l:
                          nltk.word_tokenize(l.strip(" -\n\t")), lines)
             else:
-                dt = map(nltk.word_tokenize, lines)
+                dt = map(lambda l: l.strip(" -\n\t").split(" "), lines)
+            
             d += Counter(itertools.chain.from_iterable(dt))
             chunks_done += 1
             print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
                   + "lines done")
             # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
             # TODO parallelize
-        del dt
+            del dt
 
     # remove empty entries
     d.pop("", None)
@@ -361,34 +367,47 @@ def run_one_langcode(langcode, source_data_type):
             (not os.path.exists(rawdatadir(langcode))
              or redownload_source_data)) or
             (source_data_type != "raw" and
-             (not os.path.exists(parsedfile(langcode))
+             (not os.path.exists(parsedfile(langcode, source_data_type))
               or redownload_source_data))):
-            download_data_and_extract(basedatadir, langcode)
+            download_data_and_extract(basedatadir, langcode, source_data_type)
+        if (get_words_using_tokenized and
+            source_data_type != "tokenized" and
+            (not os.path.exists(parsedfile(langcode, "tokenized"))
+             or redownload_source_data)):
+            download_data_and_extract(basedatadir, langcode, "tokenized")
     if get_parsed_text and source_data_type == "raw":
         parse_rawdatadir_to_tmpfile(langcode, rawdatadir(langcode),
                                     tmpfile(langcode),
                                     year_min, year_max)
     if get_sentences:
 
-        parsedfile_to_top_sentences(parsedfile(langcode),
+        parsedfile_to_top_sentences(parsedfile(langcode, source_data_type),
                                     sentence_outfile(langcode),
                                     langcode, source_data_type)
     if get_words:
-        parsedfile_to_top_words(parsedfile(langcode),
-                                word_outfile(langcode),
-                                source_data_type)
+        if not get_words_using_tokenized:
+            parsedfile_to_top_words(parsedfile(langcode, source_data_type),
+                                    word_outfile(langcode),
+                                    source_data_type)
+        else:
+            parsedfile_to_top_words(parsedfile(langcode, "tokenized"),
+                                    word_outfile(langcode),
+                                    "tokenized")
     if delete_tmpfile:
         if os.path.exists(tmpfile(langcode)):
             os.remove(tmpfile(langcode))
             if not os.listdir("bld/tmp"):
                 os.rmdir(f"bld/tmp")
     if delete_source_data:
-        if source_data_type == "raw":
+        if source_data_type == "raw" and not always_keep_raw_data:
             if os.path.exists(rawdatadir(langcode)):
                 shutil.rmtree(rawdatadir(langcode))
         else:
-            if os.path.exists(parsedfile(langcode)):
-                os.remove(parsedfile(langcode))
+            if os.path.exists(parsedfile(langcode, source_data_type)):
+                os.remove(parsedfile(langcode, source_data_type))
+        if get_words_using_tokenized:
+            if os.path.exists(parsedfile(langcode, "tokenized")):
+                os.remove(parsedfile(langcode, "tokenized"))
         if os.path.exists(f"basedatadir/{langcode}"):
             if not os.listdir(f"basedatadir/{langcode}"):
                 os.rmdir(f"basedatadir/{langcode}")
