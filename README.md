@@ -24,14 +24,14 @@ The following cleaning steps are performed (uncomment the respective lines in th
 - Words of differing cases are combined into the most common case.
 - Sentences in [src/extra_settings/extra_sentences_to_exclude.csv](src/extra_settings/extra_sentences_to_exclude.csv) are excluded.
 
-The [`word_tokenize`](https://www.nltk.org/api/nltk.tokenize.html) function of the Python Natural Language Toolkit ([NLTK](https://www.nltk.org/index.html)) is used to split sentences into words.
+[spaCy](https://spacy.io) is used to split sentences into words.
 
 
 ## The underlying corpus
 
 This repository is based on the OpenSubtitles2018 corpus, which is part of the OPUS collection. In particular, as source files the untokenized corpus files linked in the rightmost column language IDs of the first table [here](https://opus.nlpl.eu/OpenSubtitles-v2018.php) are taken. These contain the raw corpus text as a collection of xml subtitle files, which have been downloaded from [www.opensubtitles.org](https://www.opensubtitles.org) (see also their newer site [www.opensubtitles.com](https://www.opensubtitles.com)). 
 
-[OpenSubtitles](https://www.opensubtitles.org) is an online community where anyone can upload and download subtitles. At the time of writing 6,404,981 subtitles are available, of these 3,735,070 are included in the [OpenSubtitles2018 corpus](https://opus.nlpl.eu/OpenSubtitles-v2018.php), which contains a total of 22.10 billion tokens. See the following article for a detailed description of the corpus:
+[OpenSubtitles](https://www.opensubtitles.org) is an online community where anyone can upload and download subtitles. At the time of writing 6,404,981 subtitles are available, of these 3,735,070 are included in the [OpenSubtitles2018 corpus](https://opus.nlpl.eu/OpenSubtitles-v2018.php), which contains a total of 22.10 billion tokens (see the first columns in the second table of the preceding link for a per-language breakdown). See the following article for a detailed description of the corpus:
 > P. Lison and J. Tiedemann (2016) [OpenSubtitles2016: Extracting Large Parallel Corpora from Movie and TV Subtitles](http://www.lrec-conf.org/proceedings/lrec2016/pdf/947_Paper.pdf). In Proceedings of the 10th International Conference on Language Resources and Evaluation (LREC 2016).
 
 
@@ -44,7 +44,7 @@ The [orgtre/google-books-ngram-frequency](https://github.com/orgtre/google-books
 
 ## Limitations and known problems
 
-If a movie or episode contains several different subtitle files for a given langague in the raw corpus, then all of them are used when constructing the sentence/word lists. Since more popular movies and episodes tend to have more subtitle files, the resulting lists can hence be viewed as popularity-weighted.
+If a movie or episode contains several different subtitle files for a given language in the raw corpus, then all of them are used when constructing the sentence/word lists. Since more popular movies and episodes tend to have more subtitle files, the resulting lists can hence be viewed as popularity-weighted.
 
 Almost no language-specific corrections have been made and not all languages have been tested. In particular, adaptations might have to be made for languages not using a Latin script.
 

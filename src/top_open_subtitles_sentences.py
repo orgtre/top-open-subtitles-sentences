@@ -4,8 +4,7 @@ import os
 import pandas as pd
 import itertools
 from collections import Counter
-import nltk
-# nltk.download('punkt')
+import spacy
 import time
 import requests
 import zipfile
@@ -17,7 +16,13 @@ import gzip
 # Settings
 
 # languages (see valid_langcodes)
-langcodes = ["af"]
+langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
+                   "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
+                   "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
+                   "kk", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
+                   "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
+                   "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
+                   "ze_en", "ze_zh", "zh_cn", "zh_tw"]
 
 # type of corpus data to use as source
 source_data_type = "raw"   # "raw", "text", "tokenized"
@@ -28,7 +33,7 @@ redownload_source_data = False
 get_parsed_text = True
 get_sentences = True
 get_words = True
-get_words_using_tokenized = True
+get_words_using_tokenized = False
 delete_tmpfile = True
 delete_source_data = True
 always_keep_raw_data = True
@@ -41,6 +46,11 @@ year_max = 2018   # largest: 2018
 download_chunk_size = 1000000
 min_count = 5
 lines_per_chunk = 10000000
+
+# finetuning
+use_regex_tokenizer = False
+regex_tokenizer_pattern = "\w+|[^\w\s]+"
+linestrip_pattern = " /-–\n\t\""
 
 # output settings
 n_top_sentences = 10000
@@ -86,10 +96,17 @@ n_top_words = 30000
 valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
                    "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
-                   "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
+                   "kk", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
                    "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
                    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
+
+langs_not_in_spacy = ['br', 'bs', 'eo', 'gl', 'ka', 'kk', 'ms', 'no', 'ko']
+# TODO 'ko' should work but dependency not installing and config buggy
+
+non_latin_langs = ['ar', 'bg', 'bn', 'el', 'fa', 'he', 'hi', 'hy', 'ja', 'ka',
+                   'kk', 'ko', 'mk', 'ml', 'ru', 'si', 'ta', 'te', 'th', 'uk',
+                   'ur', 'ze_zh', 'zh_cn', 'zh_tw']
 
 def source_zipfile(langcode, source_data_type):
     if source_data_type == "raw":
@@ -209,7 +226,7 @@ def parse_xmlfile(infile):
     for line in fin.readlines():
         if not (line.startswith('<')):
             if not (line.startswith(' ')):
-                text += line.strip(" -\n\t") + "\n"
+                text += line.strip(linestrip_pattern) + "\n"
     fin.close()
     return text
 
@@ -231,7 +248,7 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
             if source_data_type != "raw":
-                lines = [l.strip(" -\n\t") for l in lines]
+                lines = [l.strip(linestrip_pattern) for l in lines]
             d += Counter(lines)
             chunks_done += 1
             print(f"   {chunks_done * min(nlines, lines_per_chunk)} " +
@@ -242,9 +259,19 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
     d.pop("", None)
     
     # remove punctuation and numbers
+    # remove 'sentences' starting with parenthesis
+    # remove 'sentences' ending with colon
+    # remove entries with latin characters
     punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
-    d = Counter({k:v for (k, v) in d.items() if not
-                 re.match(punctuation_and_numbers_regex, k)})
+    parenthesis_start_regex = r"^[(\[{]"
+    colon_end_regex = r":$"
+    pattern = "|".join([punctuation_and_numbers_regex,
+                      parenthesis_start_regex, colon_end_regex])    
+    if langcode in non_latin_langs:
+        latin_regex = "[a-zA-Zà-üÀ-Ü]"
+        pattern = "|".join([pattern, latin_regex])
+    d = Counter({k:v for (k, v) in d.items()
+                 if (not re.search(pattern, k))})
 
     # TODO make use of this
     total_count = sum(d.values())
@@ -289,7 +316,7 @@ def collapse_if_only_ending_differently(df, sentence, count):
             .reset_index(drop=True))
 
 
-def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
+def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     print("Getting top words:")
     if not os.path.exists("bld"):
         os.makedirs("bld")
@@ -301,30 +328,26 @@ def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
     with open(parsedfile, 'r') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
-            if source_data_type == "raw":
-                dt = map(nltk.word_tokenize, lines)            
-            elif source_data_type == "text":
-                dt = map(lambda l:
-                         nltk.word_tokenize(l.strip(" -\n\t")), lines)
-            else:
-                dt = map(lambda l: l.strip(" -\n\t").split(" "), lines)
-            
-            d += Counter(itertools.chain.from_iterable(dt))
+            d += tokenize_lines_and_count(lines, langcode)
             chunks_done += 1
             print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
                   + "lines done")
             # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
-            # TODO parallelize
-            del dt
-
+            # TODO parallelize            
+    
     # remove empty entries
     d.pop("", None)
     d.pop(None, None)
     
     # remove punctuation and numbers
+    # remove entries with latin characters
     punctuation_and_numbers_regex = r"^[ _\W0-9]+$"
+    pattern = punctuation_and_numbers_regex
+    if langcode in non_latin_langs:
+        latin_regex = "[a-zA-Zà-üÀ-Ü]"
+        pattern = "|".join([pattern, latin_regex])
     d = Counter({k:v for (k, v) in d.items() if not
-                 re.match(punctuation_and_numbers_regex, k)})
+                 re.search(pattern, k)})
 
     total_count = sum(d.values())
     
@@ -337,7 +360,8 @@ def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
     d['count'] = pd.to_numeric(d['count'],
                                downcast="unsigned") # saves ~50% memory
     d = d.astype({"word":"string[pyarrow]"}) # saves ~66% memory
-    
+
+    #TODO threshould should be 0.9 not 0.5
     d = collapse_case(d, "word", "count")
     
     #TODO add more cleaning steps from google-books-ngram-frequency repo
@@ -345,6 +369,36 @@ def parsedfile_to_top_words(parsedfile, outfile, source_data_type):
     (d
      .head(n_top_words)
      .to_csv(outfile, index=False))
+
+
+def tokenize_lines_and_count(lines, langcode):
+    if source_data_type == "tokenized":
+        # no tokenizer needed
+        dt = map(lambda l: l.strip(linestrip_pattern).split(" "), lines)
+    elif (use_regex_tokenizer
+          or normalized_langcode(langcode) in langs_not_in_spacy):
+        # use regex tokenizer
+        if source_data_type == "raw":
+            dt = map(lambda l: re.findall(regex_tokenizer_pattern, l), lines)
+        elif source_data_type == "text":
+            dt = map(lambda l: re.findall(regex_tokenizer_pattern,
+                                          l.strip(linestrip_pattern)), lines)
+    else:
+        # use spacy tokenizer
+        nlp = spacy.blank(normalized_langcode(langcode))
+        if source_data_type == "raw":
+            dt = map(lambda l: [w.text.strip("-") for w in nlp(l)], lines)
+        elif source_data_type == "text":
+            dt = map(lambda l: [w.text.strip("-") for w in
+                                nlp(l.strip(linestrip_pattern))], lines)
+    return Counter(itertools.chain.from_iterable(dt))
+
+
+def normalized_langcode(langcode):
+    if langcode == "ze_en" or langcode == "ze_zh":
+        return langcode.split("_")[1]
+    else:
+        return langcode.split("_")[0]
 
 
 def collapse_case(df, word, count):
@@ -388,10 +442,12 @@ def run_one_langcode(langcode, source_data_type):
         if not get_words_using_tokenized:
             parsedfile_to_top_words(parsedfile(langcode, source_data_type),
                                     word_outfile(langcode),
+                                    langcode,
                                     source_data_type)
         else:
             parsedfile_to_top_words(parsedfile(langcode, "tokenized"),
                                     word_outfile(langcode),
+                                    langcode,
                                     "tokenized")
     if delete_tmpfile:
         if os.path.exists(tmpfile(langcode)):
@@ -402,7 +458,7 @@ def run_one_langcode(langcode, source_data_type):
         if source_data_type == "raw" and not always_keep_raw_data:
             if os.path.exists(rawdatadir(langcode)):
                 shutil.rmtree(rawdatadir(langcode))
-        else:
+        if source_data_type == "text" or source_data_type == "tokenized":
             if os.path.exists(parsedfile(langcode, source_data_type)):
                 os.remove(parsedfile(langcode, source_data_type))
         if get_words_using_tokenized:
@@ -432,7 +488,7 @@ def check_langcodes():
         if langcode not in valid_langcodes:
             raise Exception(f"Error: Not a valid langcode: {langcode}")
         
-    
+
 def main():
     check_langcodes()
     for langcode in langcodes:        
@@ -444,47 +500,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-###############################################################################
-# Misc
-
-# # method 0
-# t0 = time.time()
-# dt = map(nltk.word_tokenize, lines[0:1000000])
-# dt = Counter(itertools.chain.from_iterable(dt))
-# t1 = time.time()
-# total0 = t1-t0
-
-# # method 1
-# t0 = time.time()
-# dt = map(nltk.word_tokenize, lines[0:1000000])
-# dt = pd.DataFrame({'word': itertools.chain.from_iterable(dt)})
-# dt = (dt.value_counts()
-#       .reset_index(name="count"))
-# t1 = time.time()
-# total1 = t1-t0
-
-# # method 2
-# t0 = time.time()
-# dt = nltk.word_tokenize(text[0:1000000])
-# dt = pd.DataFrame({'word': dt})
-# dt = (dt.value_counts()
-#       .reset_index(name="count"))
-# t1 = time.time()
-# total2 = t1-t0
-
-# # method 3
-# from nltk import FreqDist
-# t0 = time.time()
-# dt = FreqDist(nltk.word_tokenize(text[0:1000000]))
-# dt = (pd.DataFrame.from_dict(dt.items())
-#       .rename(columns={0: "word", 1: "count"})
-#       .sort_values(by="count", ascending=False)
-#       .reset_index(drop=True))
-# t1 = time.time()
-# total3 = t1-t0
-
-# method 2 and 3 take the same time and are around 3 times slower than 1 and 0
-# with method 1, year 2017 takes around 100s
-# method 0 uses the least memory
