@@ -19,7 +19,7 @@ import gzip
 langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
                    "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
-                   "kk", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
+                   "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
                    "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
                    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
@@ -96,7 +96,7 @@ n_top_words = 30000
 valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
                    "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
-                   "kk", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
+                   "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
                    "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
                    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
@@ -139,15 +139,18 @@ def tmpfile(langcode):
     return f"bld/tmp/{langcode}_raw.txt"
 
 def sentence_outfile(langcode):
-    return f"bld/{langcode}_top_sentences.txt"
+    return f"bld/top_sentences/{langcode}_top_sentences.txt"
 
 def word_outfile(langcode):
-    return f"bld/{langcode}_top_words.txt"
+    return f"bld/top_words/{langcode}_top_words.txt"
 
 def extra_sentences_to_exclude():
     return (pd.read_csv(f"src/extra_settings/extra_sentences_to_exclude.csv")
             .to_dict('list'))
-    
+
+total_counts_sentences_file = "bld/total_counts_sentences.csv"
+total_counts_words_file = "bld/total_counts_words.csv"
+
 
 ###############################################################################
 # Functions
@@ -237,8 +240,8 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
     # Chunking is faster once the tmpfile is too large to fit in RAM
     # and only slightly slower when it fits in RAM.
     # The below section takes around 5min with 'es' and all years.
-    if not os.path.exists("bld"):
-        os.makedirs("bld")
+    if not os.path.exists("bld/top_sentences"):
+        os.makedirs("bld/top_sentences")
     with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
         print(f"   processing {nlines} lines...")
@@ -273,8 +276,15 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
     d = Counter({k:v for (k, v) in d.items()
                  if (not re.search(pattern, k))})
 
-    # TODO make use of this
-    total_count = sum(d.values())
+    # save total counts
+    if os.path.exists(total_counts_sentences_file):
+        total_counts = (pd.read_csv(total_counts_sentences_file)
+                        .to_dict('records'))[0]
+    else:
+        total_counts = dict()
+    total_counts[langcode] = sum(d.values())
+    (pd.DataFrame(total_counts, index=[0])
+     .to_csv(total_counts_sentences_file, index=False))
     
     # remove less common items to save memory
     if not (min_count == None or min_count == 0):
@@ -318,8 +328,8 @@ def collapse_if_only_ending_differently(df, sentence, count):
 
 def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     print("Getting top words:")
-    if not os.path.exists("bld"):
-        os.makedirs("bld")
+    if not os.path.exists("bld/top_words"):
+        os.makedirs("bld/top_words")
     with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
         print(f"   processing {nlines} lines...")
@@ -349,7 +359,15 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     d = Counter({k:v for (k, v) in d.items() if not
                  re.search(pattern, k)})
 
-    total_count = sum(d.values())
+    # save total counts
+    if os.path.exists(total_counts_words_file):
+        total_counts = (pd.read_csv(total_counts_words_file)
+                        .to_dict('records'))[0]
+    else:
+        total_counts = dict()
+    total_counts[langcode] = sum(d.values())
+    (pd.DataFrame(total_counts, index=[0])
+     .to_csv(total_counts_words_file, index=False))
     
     # remove less common items to save memory
     if not (min_count == None or min_count == 0):
@@ -491,10 +509,14 @@ def check_langcodes():
 
 def main():
     check_langcodes()
-    for langcode in langcodes:        
+    if os.path.exists(total_counts_sentences_file):
+            os.remove(total_counts_sentences_file)
+    if os.path.exists(total_counts_words_file):
+            os.remove(total_counts_words_file)
+    for langcode in langcodes:
         run_one_langcode(langcode, source_data_type)
 
-        
+
 ###############################################################################
 # Run
 
