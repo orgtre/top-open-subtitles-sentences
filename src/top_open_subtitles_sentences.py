@@ -51,6 +51,7 @@ lines_per_chunk = 10000000
 use_regex_tokenizer = False
 regex_tokenizer_pattern = "\w+|[^\w\s]+"
 linestrip_pattern = " /-–\n\t\""
+lowcase_cutoff = 0.08 # set to 0.5 to get words faster
 
 # output settings
 n_top_sentences = 10000
@@ -102,7 +103,7 @@ valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
 
 langs_not_in_spacy = ['br', 'bs', 'eo', 'gl', 'ka', 'kk', 'ms', 'no', 'ko']
-# TODO 'ko' should work but dependency not installing and config buggy
+#TODO 'ko' should work but dependency not installing and config buggy
 
 non_latin_langs = ['ar', 'bg', 'bn', 'el', 'fa', 'he', 'hi', 'hy', 'ja', 'ka',
                    'kk', 'ko', 'mk', 'ml', 'ru', 'si', 'ta', 'te', 'th', 'uk',
@@ -379,8 +380,7 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
                                downcast="unsigned") # saves ~50% memory
     d = d.astype({"word":"string[pyarrow]"}) # saves ~66% memory
 
-    #TODO threshould should be 0.9 not 0.5
-    d = collapse_case(d, "word", "count")
+    d = collapse_case(d, "word", "count", "wordlow", lowcase_cutoff)
     
     #TODO add more cleaning steps from google-books-ngram-frequency repo
     
@@ -419,15 +419,41 @@ def normalized_langcode(langcode):
         return langcode.split("_")[0]
 
 
-def collapse_case(df, word, count):
-    return (df
-            .sort_values(by=[count], ascending=False)
-            .assign(Slow=df[word].str.lower())
-            .groupby('Slow', as_index=False)
-            .agg({word:'first', count:'sum'})
-            .drop(columns=['Slow'])
-            .sort_values(by=[count], ascending=False)
-            .reset_index(drop=True))
+def collapse_case(df, word, count, wordlow, cutoff=0.5):
+    if cutoff == 0.5:
+        return (df
+                .sort_values(by=[count], ascending=False)
+                .assign(wordlow=df[word].str.lower())
+                .groupby(wordlow, as_index=False)
+                .agg({word:'first', count:'sum'})
+                .drop(columns=[wordlow])
+                .sort_values(by=[count], ascending=False)
+                .reset_index(drop=True))
+    else:
+        return (df
+                .assign(wordlow=df["word"].str.lower())
+                .groupby(wordlow, as_index=False)
+                .apply(wordcase_by_cutoff, word, count, wordlow, cutoff)
+                .drop(columns=[wordlow])
+                .sort_values(by=[count], ascending=False)
+                .reset_index(drop=True))
+
+
+def wordcase_by_cutoff(df, word, count, wordlow, cutoff):
+    """Return series of word case and count based on a cutoff value.
+    If it exists, the lowercase version of 'word' is returned as long
+    as its share of all words in 'df' is larger than 'cutoff'.
+    Else the most common version is returned.
+    """
+    group_count = sum(df[count])
+    share = df[count]/group_count
+    is_low = df[word] == df[wordlow]
+    if (is_low & (share > cutoff)).any():
+        return pd.Series([df.loc[(is_low & (share > cutoff)).idxmax(), wordlow],
+                          group_count], index=[word, count])
+    else:
+        return pd.Series([df.loc[share.idxmax(), word],
+                          group_count], index=[word, count])
     
 
 def run_one_langcode(langcode, source_data_type):
@@ -509,6 +535,7 @@ def check_langcodes():
 
 def main():
     check_langcodes()
+    check_cwd()
     if os.path.exists(total_counts_sentences_file):
             os.remove(total_counts_sentences_file)
     if os.path.exists(total_counts_words_file):
