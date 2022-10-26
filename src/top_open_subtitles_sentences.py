@@ -34,6 +34,7 @@ get_parsed_text = True
 get_sentences = True
 get_words = True
 get_words_using_tokenized = False
+get_summary_table = True
 delete_tmpfile = True
 delete_source_data = True
 always_keep_raw_data = True
@@ -52,6 +53,7 @@ use_regex_tokenizer = False
 regex_tokenizer_pattern = "\w+|[^\w\s]+"
 linestrip_pattern = " /-–\n\t\""
 lowcase_cutoff = 0.08 # set to 0.5 to get words faster
+md_summary_table = True
 
 # output settings
 n_top_sentences = 10000
@@ -62,33 +64,41 @@ n_top_words = 30000
 # Info
 
 # Valid langcodes:
-# See the variable 'valid_langcodes' below. For a key see
-# https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
-# but note that some codes contain additional suffixes and that 'ze' signifies
-# files containing dual Chinese and English subtitles.
+# See the variable 'valid_langcodes' below. 'languages' contains a key.
+# Note that 'ze' signifies files containing dual Chinese and English subtitles.
 
 # Storage requirements:
-# Size of the extracted raw corpus data by langcode:
-# "en": 54.2GB, "es": 27.1GB, "nl": 12.7GB
+# With 'delete_source_data', source data of type "text" and "tokenized" is
+# deleted after extracting top sentences/words. These source files are smaller
+# than those for 'source_data_type' = "raw". If additionally
+# 'always_keep_raw_data' is 'False', "raw" data is also deleted.
+# Size of the extracted 'raw' corpus data:
+# "all 62 languages": 427.6GB, "en": 54.2GB, "pt_br": 32.0GB, "pl": 29.5GB,
+# "es": 27.1GB, "ro": 24.4GB, "tr": 21.8Gb
 
 # Memory requirements:
-# When langcode = "nl", year_min = 0, and year_max = 2018, the corpus is parsed
-# into a file of 3.32GB. This file is then loaded 'lines_per_chunk' lines at a
-# time into a Counter (dict subclass) object which still might take many GBs of
-# memory. By setting 'min_count', entries with count less than that can be
-# omitted to save memory, but this only happens after the whole tempfile has
-# been loaded (otherwise the final counts would not be correct).
+# With raw data, langcode = "nl", year_min = 0, and year_max = 2018, the corpus
+# is parsed into a file of 3.32GB. This file is then loaded 'lines_per_chunk'
+# lines at a time into a Counter (dict subclass) object which still might take
+# many GBs of memory. By setting 'min_count', entries with count less than that
+# can be omitted to save memory, but this only happens after the whole tempfile
+# has been loaded (otherwise the final counts would not be correct).
 
 # Download time:
-# Variable 'download_chunk_size' influences the download time. With the
-# default I get download speeds of around 50MB/s. The zipped raw corpus for a
-# large language like "en" is around 13GB and hence takes me around 4 minutes
-# to download.
+# Variable 'download_chunk_size' influences the download time. The default
+# works well with a bandwidth of 50MB/s, bringing the download speed close to
+# that. The zipped raw corpus for a large language like "en" is around 13GB
+# and hence takes around 4 minutes to download at that rate.
 
-# Runtime excluding data download (on M1 MBP):
-# When langcode = "nl", year_min = 0, year_max = 2018:
-# 4 minutes with get_words = False.
-# 1h26min with get_words = True.
+# Runtime:
+# Runtime excluding data download (on M1 MBP) with the default settings:
+# "all 62 languages": 18h, "pl": 1h11min, "ar": 29min, "fr": 30min.
+# Runtime is substantially faster without 'get_words', or when using another
+# datatype than 'raw' via 'source_data_type' or 'get_words_using_tokenized'.
+# The drawback is that this allows no control over the years and subtitle
+# files to include, or the tokenization. With 'use_regex_tokenizer' a faster
+# bare-bones tokenizer is always used instead of spaCy (normally it is only
+# used as fallback for 'langs_not_in_spacy').
 
 
 ###############################################################################
@@ -101,6 +111,25 @@ valid_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
                    "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
                    "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
                    "ze_en", "ze_zh", "zh_cn", "zh_tw"]
+
+languages = {"af": "Afrikaans", "ar": "Arabic", "bg": "Bulgarian", "bn":
+             "Bengali", "br": "Breton", "bs": "Bosnian", "ca": "Catalan",
+             "cs": "Czech", "da": "Danish", "de": "German", "el": "Greek",
+             "en": "English", "eo": "Esperanto", "es": "Spanish", "et":
+             "Estonian", "eu": "Basque", "fa": "Persian", "fi": "Finnish",
+             "fr": "French", "gl": "Galician", "he": "Hebrew", "hi": "Hindi",
+             "hr": "Croatian", "hu": "Hungarian", "hy": "Armenian", "id":
+             "Indonesian", "is": "Icelandic", "it": "Italian", "ja":
+             "Japanese", "ka": "Georgian", "kk": "Kazakh", "ko": "Korean",
+             "lt": "Lithuanian", "lv": "Latvian", "mk": "Macedonian", "ml":
+             "Malayalam", "ms": "Malay", "nl": "Dutch", "no": "Norwegian",
+             "pl": "Polish", "pt": "Portuguese", "pt_br": "Portuguese, Brazil",
+             "ro": "Romanian", "ru": "Russian", "si": "Sinhala", "sk":
+             "Slovak", "sl": "Slovenian", "sq": "Albanian", "sr": "Serbian",
+             "sv": "Swedish", "ta": "Tamil", "te": "Telugu", "th": "Thai",
+             "tl": "Tagalog", "tr": "Turkish", "uk": "Ukrainian", "ur": "Urdu",
+             "vi": "Vietnamese", "ze_en": "English, ze", "ze_zh":
+             "Chinese, ze", "zh_cn": "Chinese", "zh_tw": "Chinese, Taiwan"}
 
 langs_not_in_spacy = ['br', 'bs', 'eo', 'gl', 'ka', 'kk', 'ms', 'no', 'ko']
 #TODO 'ko' should work but dependency not installing and config buggy
@@ -454,7 +483,7 @@ def wordcase_by_cutoff(df, word, count, wordlow, cutoff):
     else:
         return pd.Series([df.loc[share.idxmax(), word],
                           group_count], index=[word, count])
-    
+
 
 def run_one_langcode(langcode, source_data_type):
     t0 = time.time()
@@ -531,7 +560,29 @@ def check_langcodes():
     for langcode in langcodes:
         if langcode not in valid_langcodes:
             raise Exception(f"Error: Not a valid langcode: {langcode}")
-        
+
+
+def summary_table():
+    sc = pd.read_csv(total_counts_sentences_file)
+    wc = pd.read_csv(total_counts_words_file)
+    if md_summary_table:
+        (pd.DataFrame({"code": langcodes})
+         .assign(language=[languages[l] for l in st['code']])
+         .assign(sentences=[f"[{sc[l][0]:,}](bld/top_sentences/"
+                            + f"{l}_top_sentences.txt)"
+                            for l in st['code']])
+         .assign(words=[f"[{wc[l][0]:,}](bld/top_words/"
+                        + f"{l}_top_words.txt)"
+                        for l in st['code']])
+         .to_markdown("bld/summary_table.md", index=False,
+                      colalign=["left", "left", "right", "right"]))
+    else:
+        (pd.DataFrame({"code": langcodes})
+         .assign(language=[languages[l] for l in st['code']])
+         .assign(sentences=[sc[l][0] for l in st['code']])
+         .assign(words=[wc[l][0] for l in st['code']])
+         .to_csv("bld/summary_table.csv", index=False))
+
 
 def main():
     check_langcodes()
@@ -542,6 +593,8 @@ def main():
             os.remove(total_counts_words_file)
     for langcode in langcodes:
         run_one_langcode(langcode, source_data_type)
+    if get_summary_table:
+        summary_table()
 
 
 ###############################################################################
