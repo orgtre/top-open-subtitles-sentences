@@ -1,2 +1,6 @@
 src/data
-bld
+bld/*
+!bld/top_sentences
+!bld/top_words
+!bld/total_counts_sentences.csv
+!bld/total_counts_words.csv

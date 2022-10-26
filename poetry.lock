@@ -2,7 +2,7 @@
 name = "blis"
 version = "0.7.9"
 description = "The Blis BLAS-like linear algebra library, as a self-contained C-extension."
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
 
@@ -13,7 +13,7 @@ numpy = ">=1.15.0"
 name = "catalogue"
 version = "2.0.8"
 description = "Super lightweight function registries for your library"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -40,7 +40,7 @@ unicode_backport = ["unicodedata2"]
 name = "click"
 version = "8.1.3"
 description = "Composable command line interface toolkit"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -51,7 +51,7 @@ colorama = {version = "*", markers = "platform_system == \"Windows\""}
 name = "colorama"
 version = "0.4.5"
 description = "Cross-platform colored terminal text."
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 
@@ -59,7 +59,7 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*"
 name = "confection"
 version = "0.0.3"
 description = "The sweetest config system for Python"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -71,7 +71,7 @@ srsly = ">=2.4.0,<3.0.0"
 name = "cymem"
 version = "2.0.7"
 description = "Manage calls to calloc/free through Cython"
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
 
@@ -87,7 +87,7 @@ python-versions = ">=3.5"
 name = "Jinja2"
 version = "3.1.2"
 description = "A very fast and expressive template engine."
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -101,15 +101,15 @@ i18n = ["Babel (>=2.7)"]
 name = "joblib"
 version = "1.2.0"
 description = "Lightweight pipelining with Python functions"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.7"
 
 [[package]]
 name = "langcodes"
 version = "3.3.0"
 description = "Tools for labeling human languages with IETF language tags"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -120,7 +120,7 @@ data = ["language-data (>=1.1,<2.0)"]
 name = "MarkupSafe"
 version = "2.1.1"
 description = "Safely add untrusted strings to HTML/XML markup."
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -128,7 +128,7 @@ python-versions = ">=3.7"
 name = "murmurhash"
 version = "1.0.9"
 description = "Cython bindings for MurmurHash"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -144,7 +144,7 @@ python-versions = ">=3.8"
 name = "packaging"
 version = "21.3"
 description = "Core utilities for Python packages"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -174,7 +174,7 @@ test = ["hypothesis (>=5.5.3)", "pytest (>=6.0)", "pytest-xdist (>=1.31)"]
 name = "pathy"
 version = "0.6.2"
 description = "pathlib.Path subclasses for local and cloud bucket storage"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">= 3.6"
 
@@ -192,7 +192,7 @@ test = ["mock", "pytest", "pytest-coverage", "typer-cli"]
 name = "preshed"
 version = "3.0.8"
 description = "Cython hash table that trusts the keys are pre-hashed"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -215,7 +215,7 @@ numpy = ">=1.16.6"
 name = "pydantic"
 version = "1.10.2"
 description = "Data validation and settings management using python type hints"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -230,7 +230,7 @@ email = ["email-validator (>=1.0.3)"]
 name = "pyparsing"
 version = "3.0.9"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6.8"
 
@@ -241,8 +241,8 @@ diagrams = ["jinja2", "railroad-diagrams"]
 name = "pythainlp"
 version = "3.1.0"
 description = "Thai Natural Language Processing library"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.7"
 
 [package.dependencies]
@@ -281,8 +281,8 @@ wunsen = ["wunsen (>=0.0.1)"]
 name = "python-crfsuite"
 version = "0.9.8"
 description = "Python binding for CRFsuite"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = "*"
 
 [[package]]
@@ -308,8 +308,8 @@ python-versions = "*"
 name = "pyvi"
 version = "0.1.1"
 description = "Python Vietnamese Toolkit"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = "*"
 
 [package.dependencies]
@@ -342,8 +342,8 @@ use_chardet_on_py3 = ["chardet (>=3.0.2,<6)"]
 name = "scikit-learn"
 version = "1.1.2"
 description = "A set of python modules for machine learning and data mining"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.8"
 
 [package.dependencies]
@@ -362,8 +362,8 @@ tests = ["black (>=22.3.0)", "flake8 (>=3.8.2)", "matplotlib (>=3.1.2)", "mypy (
 name = "scipy"
 version = "1.9.3"
 description = "Fundamental algorithms for scientific computing in Python"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.8"
 
 [package.dependencies]
@@ -378,7 +378,7 @@ test = ["asv", "gmpy2", "mpmath", "pytest", "pytest-cov", "pytest-xdist", "sciki
 name = "setuptools"
 version = "65.5.0"
 description = "Easily download, build, install, upgrade, and uninstall Python packages"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -399,8 +399,8 @@ python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
 name = "sklearn-crfsuite"
 version = "0.3.6"
 description = "CRFsuite (python-crfsuite) wrapper which provides interface simlar to scikit-learn"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = "*"
 
 [package.dependencies]
@@ -413,7 +413,7 @@ tqdm = ">=2.0"
 name = "smart-open"
 version = "5.2.1"
 description = "Utils for streaming large files (S3, HDFS, GCS, Azure Blob Storage, gzip, bz2...)"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6,<4.0"
 
@@ -430,7 +430,7 @@ webhdfs = ["requests"]
 name = "spacy"
 version = "3.4.2"
 description = "Industrial-strength Natural Language Processing (NLP) in Python"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -486,7 +486,7 @@ transformers = ["spacy-transformers (>=1.1.2,<1.2.0)"]
 name = "spacy-legacy"
 version = "3.0.10"
 description = "Legacy registered functions for spaCy backwards compatibility"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -494,7 +494,7 @@ python-versions = ">=3.6"
 name = "spacy-loggers"
 version = "1.0.3"
 description = "Logging utilities for SpaCy"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -505,7 +505,7 @@ wasabi = ">=0.8.1,<1.1.0"
 name = "srsly"
 version = "2.4.5"
 description = "Modern high-performance serialization utilities for Python"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -516,8 +516,8 @@ catalogue = ">=2.0.3,<2.1.0"
 name = "SudachiDict-core"
 version = "20221021"
 description = "Sudachi Dictionary for SudachiPy - Core Edition"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = "*"
 
 [package.dependencies]
@@ -527,8 +527,8 @@ SudachiPy = ">=0.5,<0.7"
 name = "SudachiPy"
 version = "0.6.6"
 description = "Python version of Sudachi, the Japanese Morphological Analyzer"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = "*"
 
 [package.extras]
@@ -538,8 +538,8 @@ tests = ["sudachidict-core", "tokenizers"]
 name = "tabulate"
 version = "0.9.0"
 description = "Pretty-print tabular data"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.7"
 
 [package.extras]
@@ -549,7 +549,7 @@ widechars = ["wcwidth"]
 name = "thinc"
 version = "8.1.5"
 description = "A refreshing functional take on deep learning, compatible with your favorite libraries"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -594,15 +594,15 @@ torch = ["torch (>=1.6.0)"]
 name = "threadpoolctl"
 version = "3.1.0"
 description = "threadpoolctl"
-category = "main"
-optional = false
+category = "dev"
+optional = true
 python-versions = ">=3.6"
 
 [[package]]
 name = "tqdm"
 version = "4.64.1"
 description = "Fast, Extensible Progress Meter"
-category = "main"
+category = "dev"
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,>=2.7"
 
@@ -619,7 +619,7 @@ telegram = ["requests"]
 name = "typer"
 version = "0.4.2"
 description = "Typer, build great CLIs. Easy to code. Based on Python type hints."
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.6"
 
@@ -636,7 +636,7 @@ test = ["black (>=22.3.0,<23.0.0)", "coverage (>=5.2,<6.0)", "isort (>=5.0.6,<6.
 name = "typing-extensions"
 version = "4.4.0"
 description = "Backported and Experimental Type Hints for Python 3.7+"
-category = "main"
+category = "dev"
 optional = false
 python-versions = ">=3.7"
 
@@ -657,14 +657,19 @@ socks = ["PySocks (>=1.5.6,!=1.5.7,<2.0)"]
 name = "wasabi"
 version = "0.10.1"
 description = "A lightweight console printing and formatting toolkit"
-category = "main"
+category = "dev"
 optional = false
 python-versions = "*"
+
+[extras]
+japanese = []
+thai = []
+vietnamese = []
 
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8,<4"
-content-hash = "39c8d030cb6be7334e8985f35cfc3425b32114256a2443b2d6bafad1aec47691"
+content-hash = "3301c24a092b3892097eec06ff9ce6582c312fd68c96ae934bdf67162dc74e01"
 
 [metadata.files]
 blis = [

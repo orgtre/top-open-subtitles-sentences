@@ -17,12 +17,12 @@ import requests
 
 # languages (see valid_langcodes)
 langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
-                   "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
-                   "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
-                   "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
-                   "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
-                   "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
-                   "ze_en", "ze_zh", "zh_cn", "zh_tw"]
+             "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
+             "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
+             "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
+             "pt", "pt_br", "ro", "ru", "si", "sk", "sl", "sq", "sr",
+             "sv", "ta", "te", "th", "tl", "tr", "uk", "ur", "vi",
+             "ze_en", "ze_zh", "zh_cn", "zh_tw"]
 
 # type of corpus data to use as source
 source_data_type = "raw"   # "raw", "text", "tokenized"
@@ -34,7 +34,7 @@ get_parsed_text = True
 get_sentences = True
 get_words = True
 get_words_using_tokenized = False
-get_summary_table = True
+get_summary_table = False
 delete_tmpfile = True
 delete_source_data = True
 always_keep_raw_data = True
@@ -169,10 +169,10 @@ def tmpfile(langcode):
     return f"bld/tmp/{langcode}_raw.txt"
 
 def sentence_outfile(langcode):
-    return f"bld/top_sentences/{langcode}_top_sentences.txt"
+    return f"bld/top_sentences/{langcode}_top_sentences.csv"
 
 def word_outfile(langcode):
-    return f"bld/top_words/{langcode}_top_words.txt"
+    return f"bld/top_words/{langcode}_top_words.csv"
 
 def extra_sentences_to_exclude():
     return (pd.read_csv(f"src/extra_settings/extra_sentences_to_exclude.csv")
@@ -358,8 +358,6 @@ def collapse_if_only_ending_differently(df, sentence, count):
 
 def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     print("Getting top words:")
-    if source_data_type != "tokenized" and not use_regex_tokenizer:
-        import spacy
     if not os.path.exists("bld/top_words"):
         os.makedirs("bld/top_words")
     with open(parsedfile, 'br') as f:
@@ -434,6 +432,7 @@ def tokenize_lines_and_count(lines, langcode):
                                           l.strip(linestrip_pattern)), lines)
     else:
         # use spacy tokenizer
+        import spacy
         nlp = spacy.blank(normalized_langcode(langcode))
         if source_data_type == "raw":
             dt = map(lambda l: [w.text.strip("-") for w in nlp(l)], lines)
@@ -570,11 +569,9 @@ def summary_table():
     if md_summary_table:
         (pd.DataFrame({"code": langcodes})
          .assign(language=[languages[l] for l in st['code']])
-         .assign(sentences=[f"[{sc[l][0]:,}](bld/top_sentences/"
-                            + f"{l}_top_sentences.txt)"
+         .assign(sentences=[f"[{sc[l][0]:,}]({sentence_outfile(l)})"
                             for l in st['code']])
-         .assign(words=[f"[{wc[l][0]:,}](bld/top_words/"
-                        + f"{l}_top_words.txt)"
+         .assign(words=[f"[{wc[l][0]:,}]({word_outfile(l)})"
                         for l in st['code']])
          .to_markdown("bld/summary_table.md", index=False,
                       colalign=["left", "left", "right", "right"]))
