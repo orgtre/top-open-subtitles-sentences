@@ -49,6 +49,7 @@ min_count = 5
 lines_per_chunk = 10000000
 
 # finetuning
+one_subtitle_per_movie = False
 use_regex_tokenizer = False
 regex_tokenizer_pattern = "\w+|[^\w\s]+"
 linestrip_pattern = " /-–\n\t\""
@@ -238,15 +239,21 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
                 print(f"   {ydir}")
                 outtext = ""
                 for mdir in os.listdir(os.path.join(yeardatadir, ydir)):
-                    #print("mdir: " + mdir)
                     mdirfull = os.path.join(yeardatadir, ydir, mdir)
                     if os.path.isdir(mdirfull):
-                        for fname in os.listdir(mdirfull):
-                            if not fname.startswith('.'):
-                                #print(fname)
-                                fpathfull = os.path.join(yeardatadir, ydir,
-                                                         mdir, fname)
-                                outtext += parse_xmlfile(fpathfull)
+                        if one_subtitle_per_movie:
+                            # sort to make deterministic and take last
+                            fname = sorted([f for f in os.listdir(mdirfull)
+                                            if not f.startswith('.')])[-1]
+                            fpathfull = os.path.join(yeardatadir, ydir,
+                                                     mdir, fname)
+                            outtext += parse_xmlfile(fpathfull)
+                        else:
+                            for fname in os.listdir(mdirfull):
+                                if not fname.startswith('.'):
+                                    fpathfull = os.path.join(yeardatadir, ydir,
+                                                             mdir, fname)
+                                    outtext += parse_xmlfile(fpathfull)
                 fout.write(outtext)
         except ValueError:
             pass
