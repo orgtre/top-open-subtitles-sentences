@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "top-open-subtitles-sentences"
 version = "0.1.0"
-description = ""
-authors = [""]
+description = "Get top sentences/words from OpenSubtitles2018"
+authors = ["orgtre"]
 
 
 [tool.poetry.dependencies]
@@ -10,11 +10,21 @@ python = ">=3.8,<4"
 pandas = "^1.5.0"
 requests = "^2.28.1"
 pyarrow = "^9.0.0"
+
+
+[tool.poetry.group.words.dependencies]
 spacy = "^3.4.2"
-SudachiPy = "^0.6.6"
-SudachiDict-core = "^20221021"
-pythainlp = "^3.1.0"
-pyvi = "^0.1.1"
+
+SudachiPy = { version = "^0.6.6", optional = true }
+SudachiDict-core = { version = "^20221021", optional = true }
+pythainlp = { version = "^3.1.0", optional = true }
+pyvi = { version = "^0.1.1", optional = true }
+
+
+[tool.poetry.extras]
+japanese = ["SudachiPy", "SudachiDict-core"]
+thai = ["pythainlp"]
+vietnamese = ["pyvi"]
 
 
 [build-system]

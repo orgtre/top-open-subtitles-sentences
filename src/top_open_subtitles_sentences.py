@@ -1,16 +1,16 @@
 # Build the top-open-subtitles-sentences repository
 
 import os
-import pandas as pd
+import shutil
+import time
+import zipfile
+import gzip
+import re
 import itertools
 from collections import Counter
-import spacy
-import time
+import pandas as pd
 import requests
-import zipfile
-import re
-import shutil
-import gzip
+
 
 ###############################################################################
 # Settings
@@ -77,12 +77,12 @@ n_top_words = 30000
 # "es": 27.1GB, "ro": 24.4GB, "tr": 21.8Gb
 
 # Memory requirements:
-# With raw data, langcode = "nl", year_min = 0, and year_max = 2018, the corpus
-# is parsed into a file of 3.32GB. This file is then loaded 'lines_per_chunk'
-# lines at a time into a Counter (dict subclass) object which still might take
-# many GBs of memory. By setting 'min_count', entries with count less than that
-# can be omitted to save memory, but this only happens after the whole tempfile
-# has been loaded (otherwise the final counts would not be correct).
+# With raw data, langcode = "en", year_min = 0, and year_max = 2018, the corpus
+# is parsed into a file of 13GB. This file is then loaded 'lines_per_chunk'
+# lines at a time into a Counter (dict subclass) object which at its peak takes
+# 26GB of memory. By setting 'min_count', entries with count less than that can
+# be omitted to save memory, but this only happens after the whole tempfile has
+# been loaded (otherwise the final counts would not be correct).
 
 # Download time:
 # Variable 'download_chunk_size' influences the download time. The default
@@ -358,6 +358,8 @@ def collapse_if_only_ending_differently(df, sentence, count):
 
 def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     print("Getting top words:")
+    if source_data_type != "tokenized" and not use_regex_tokenizer:
+        import spacy
     if not os.path.exists("bld/top_words"):
         os.makedirs("bld/top_words")
     with open(parsedfile, 'br') as f:
