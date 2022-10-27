@@ -4,3 +4,4 @@ bld/*
 !bld/top_words
 !bld/total_counts_sentences.csv
 !bld/total_counts_words.csv
+!bld/original_language_only

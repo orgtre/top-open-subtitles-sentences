@@ -49,6 +49,7 @@ min_count = 5
 lines_per_chunk = 10000000
 
 # finetuning
+original_language_only = False
 one_subtitle_per_movie = False
 use_regex_tokenizer = False
 regex_tokenizer_pattern = "\w+|[^\w\s]+"
@@ -231,6 +232,10 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
         os.remove(tmpfile)
     if not os.path.exists("bld/tmp"):
         os.makedirs("bld/tmp")
+    global n_subfiles, n_original_info, n_matching_original
+    n_subfiles = 0
+    n_original_info = 0
+    n_matching_original = 0
     yeardatadir = os.path.join(rawdatadir, f"OpenSubtitles/raw/{langcode}")
     fout = open(tmpfile, 'a')
     for ydir in os.listdir(yeardatadir):
@@ -247,22 +252,52 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
                                             if not f.startswith('.')])[-1]
                             fpathfull = os.path.join(yeardatadir, ydir,
                                                      mdir, fname)
+                            n_subfiles += 1
                             outtext += parse_xmlfile(fpathfull)
                         else:
                             for fname in os.listdir(mdirfull):
                                 if not fname.startswith('.'):
                                     fpathfull = os.path.join(yeardatadir, ydir,
                                                              mdir, fname)
-                                    outtext += parse_xmlfile(fpathfull)
+                                    n_subfiles += 1
+                                    if original_language_only:
+                                        if check_if_original(fpathfull,
+                                                             langcode):
+                                            n_matching_original += 1
+                                            outtext += parse_xmlfile(fpathfull)
+                                    else:
+                                        outtext += parse_xmlfile(fpathfull)
                 fout.write(outtext)
         except ValueError:
             pass
     fout.close()
+    print(f"   files parsed: {n_subfiles}")
+    if original_language_only:
+        print(f"   {n_original_info/n_subfiles:.0%} with original info")
+        print(f"   {n_matching_original/n_subfiles:.0%} "
+              + "match original language")
 
-    
+
+def check_if_original(infile, langcode):
+    global n_original_info
+    fin = open(infile, 'r')
+    intext = fin.read()
+    fin.close()
+    m = re.search("<original>(.*?)</original>", intext)
+    if m:
+        n_original_info += 1
+        #print(f"     {m.group(1)}")
+        if languages[langcode].split(",")[0] in m.group(1):
+            return True
+        else:
+            return False
+    else:
+        return False
+
+
 def parse_xmlfile(infile):
     fin = open(infile, 'r')
-    text = ""
+    text = ""    
     for line in fin.readlines():
         if not (line.startswith('<')):
             if not (line.startswith(' ')):
@@ -281,7 +316,11 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
         os.makedirs("bld/top_sentences")
     with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
-        print(f"   processing {nlines} lines...")
+        if nlines == 0:
+            print(f"   No lines to process.")
+            return
+        else:
+            print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
     with open(parsedfile, 'r') as f:
@@ -345,7 +384,7 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
     try:
         d = d[~d['sentence'].isin(extra_sentences_to_exclude()[langcode])]
     except KeyError as e:
-        print("No extra sentences to exclude found.")
+        print("   no extra sentences to exclude")
     
     (d
      .head(n_top_sentences)
@@ -369,7 +408,11 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
         os.makedirs("bld/top_words")
     with open(parsedfile, 'br') as f:
         nlines = sum(1 for i in f)
-        print(f"   processing {nlines} lines...")
+        if nlines == 0:
+            print(f"   No lines to process.")
+            return
+        else:
+            print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
     with open(parsedfile, 'r') as f:
