@@ -16,7 +16,7 @@ import requests
 # Settings
 
 # languages (see valid_langcodes)
-langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
+run_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
              "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
              "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
              "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
@@ -607,13 +607,13 @@ def check_cwd():
                             + "not found.")
 
 
-def check_langcodes():
+def check_langcodes(langcodes):
     for langcode in langcodes:
         if langcode not in valid_langcodes:
             raise Exception(f"Error: Not a valid langcode: {langcode}")
 
 
-def summary_table():
+def summary_table(langcodes):
     sc = pd.read_csv(total_counts_sentences_file)
     wc = pd.read_csv(total_counts_words_file)
     if md_summary_table:
@@ -634,16 +634,16 @@ def summary_table():
 
 
 def main():
-    check_langcodes()
+    check_langcodes(run_langcodes)
     check_cwd()
     if os.path.exists(total_counts_sentences_file):
             os.remove(total_counts_sentences_file)
     if os.path.exists(total_counts_words_file):
             os.remove(total_counts_words_file)
-    for langcode in langcodes:
+    for langcode in run_langcodes:
         run_one_langcode(langcode, source_data_type)
     if get_summary_table:
-        summary_table()
+        summary_table(run_langcodes)
 
 
 ###############################################################################
