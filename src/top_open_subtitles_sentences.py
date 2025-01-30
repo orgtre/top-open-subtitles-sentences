@@ -141,15 +141,13 @@ non_latin_langs = ['ar', 'bg', 'bn', 'el', 'fa', 'he', 'hi', 'hy', 'ja', 'ka',
                    'ur', 'ze_zh', 'zh_cn', 'zh_tw']
 
 def source_zipfile(langcode, source_data_type):
+    url_base = "https://object.pouta.csc.fi/OPUS-OpenSubtitles/"
     if source_data_type == "raw":
-        return ("https://opus.nlpl.eu/download.php?f="
-                + f"OpenSubtitles/v2018/raw/{langcode}.zip")
+        return (url_base + f"v2018/raw/{langcode}.zip")
     if source_data_type == "text":
-        return ("https://opus.nlpl.eu/download.php?f=" +
-                f"OpenSubtitles/v2018/mono/OpenSubtitles.raw.{langcode}.gz")
+        return (url_base + f"v2018/mono/{langcode}.txt.gz")
     if source_data_type == "tokenized":
-        return ("https://opus.nlpl.eu/download.php?f="
-                + f"OpenSubtitles/v2018/mono/OpenSubtitles.{langcode}.gz")
+        return (url_base + f"v2018/mono/{langcode}.tok.gz")
     else:
         raise Exception(f"Error: {source_data_type} not a valid " +
                         "source_data_type.")
