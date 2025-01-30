@@ -52,7 +52,7 @@ lines_per_chunk = 10000000
 original_language_only = False
 one_subtitle_per_movie = False
 use_regex_tokenizer = False
-regex_tokenizer_pattern = "\w+|[^\w\s]+"
+regex_tokenizer_pattern = r"\w+|[^\w\s]+"
 linestrip_pattern = " /-–\n\t\""
 lowcase_cutoff = 0.08 # set to 0.5 to get words faster
 md_summary_table = True
@@ -235,7 +235,7 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
     n_original_info = 0
     n_matching_original = 0
     yeardatadir = os.path.join(rawdatadir, f"OpenSubtitles/raw/{langcode}")
-    fout = open(tmpfile, 'a')
+    fout = open(tmpfile, 'a', encoding='utf-8')
     for ydir in os.listdir(yeardatadir):
         try:
             if int(ydir) >= year_min and int(ydir) <= year_max:
@@ -278,7 +278,7 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
 
 def check_if_original(infile, langcode):
     global n_original_info
-    fin = open(infile, 'r')
+    fin = open(infile, 'r', encoding='utf-8')
     intext = fin.read()
     fin.close()
     m = re.search("<original>(.*?)</original>", intext)
@@ -294,7 +294,7 @@ def check_if_original(infile, langcode):
 
 
 def parse_xmlfile(infile):
-    fin = open(infile, 'r')
+    fin = open(infile, 'r', encoding='utf-8')
     text = ""    
     for line in fin.readlines():
         if not (line.startswith('<')):
@@ -321,7 +321,7 @@ def parsedfile_to_top_sentences(parsedfile, outfile,
             print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
-    with open(parsedfile, 'r') as f:
+    with open(parsedfile, 'r', encoding='utf-8') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
             if source_data_type != "raw":
@@ -413,7 +413,7 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
             print(f"   processing {nlines} lines...")
     d = Counter()
     chunks_done = 0
-    with open(parsedfile, 'r') as f:
+    with open(parsedfile, 'r', encoding='utf-8') as f:
         for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
                                            fillvalue=""):
             d += tokenize_lines_and_count(lines, langcode)
