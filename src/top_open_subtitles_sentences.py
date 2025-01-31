@@ -16,7 +16,7 @@ import requests
 # Settings
 
 # languages (see valid_langcodes)
-langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
+run_langcodes = ["af", "ar", "bg", "bn", "br", "bs", "ca", "cs", "da", "de",
              "el", "en", "eo", "es", "et", "eu", "fa", "fi", "fr", "gl",
              "he", "hi", "hr", "hu", "hy", "id", "is", "it", "ja", "ka",
              "kk", "ko", "lt", "lv", "mk", "ml", "ms", "nl", "no", "pl",
@@ -237,37 +237,38 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
     yeardatadir = os.path.join(rawdatadir, f"OpenSubtitles/raw/{langcode}")
     fout = open(tmpfile, 'a', encoding='utf-8')
     for ydir in os.listdir(yeardatadir):
-        try:
-            if int(ydir) >= year_min and int(ydir) <= year_max:
-                print(f"   {ydir}")
-                outtext = ""
-                for mdir in os.listdir(os.path.join(yeardatadir, ydir)):
-                    mdirfull = os.path.join(yeardatadir, ydir, mdir)
-                    if os.path.isdir(mdirfull):
-                        if one_subtitle_per_movie:
-                            # sort to make deterministic and take last
-                            fname = sorted([f for f in os.listdir(mdirfull)
-                                            if not f.startswith('.')])[-1]
-                            fpathfull = os.path.join(yeardatadir, ydir,
-                                                     mdir, fname)
-                            n_subfiles += 1
-                            outtext += parse_xmlfile(fpathfull)
-                        else:
-                            for fname in os.listdir(mdirfull):
-                                if not fname.startswith('.'):
-                                    fpathfull = os.path.join(yeardatadir, ydir,
-                                                             mdir, fname)
-                                    n_subfiles += 1
-                                    if original_language_only:
-                                        if check_if_original(fpathfull,
-                                                             langcode):
-                                            n_matching_original += 1
-                                            outtext += parse_xmlfile(fpathfull)
-                                    else:
-                                        outtext += parse_xmlfile(fpathfull)
-                fout.write(outtext)
-        except ValueError:
-            pass
+        if int(ydir) < year_min or int(ydir) > year_max:
+            continue
+
+        print(f"   {ydir}")
+        outtext = ""
+        for mdir in os.listdir(os.path.join(yeardatadir, ydir)):
+            mdirfull = os.path.join(yeardatadir, ydir, mdir)
+            if not os.path.isdir(mdirfull):
+                continue
+            if one_subtitle_per_movie:
+                # sort to make deterministic and take last
+                fname = sorted([f for f in os.listdir(mdirfull)
+                                if not f.startswith('.')])[-1]
+                fpathfull = os.path.join(yeardatadir, ydir,
+                                            mdir, fname)
+                n_subfiles += 1
+                outtext += text_from_xmlfile(fpathfull)
+            else:
+                for fname in os.listdir(mdirfull):
+                    if fname.startswith('.'):
+                        continue
+                    fpathfull = os.path.join(yeardatadir, ydir,
+                                                mdir, fname)
+                    n_subfiles += 1
+                    if original_language_only:
+                        if check_if_original(fpathfull,
+                                                langcode):
+                            n_matching_original += 1
+                            outtext += text_from_xmlfile(fpathfull)
+                    else:
+                        outtext += text_from_xmlfile(fpathfull)
+        fout.write(outtext)
     fout.close()
     print(f"   files parsed: {n_subfiles}")
     if original_language_only:
@@ -293,13 +294,14 @@ def check_if_original(infile, langcode):
         return False
 
 
-def parse_xmlfile(infile):
+def text_from_xmlfile(infile):
     fin = open(infile, 'r', encoding='utf-8')
     text = ""    
     for line in fin.readlines():
-        if not (line.startswith('<')):
-            if not (line.startswith(' ')):
-                text += line.strip(linestrip_pattern) + "\n"
+        # xml and text content are on separate lines
+        if line.startswith('<') or line.startswith(' '):
+            continue
+        text += line.strip(linestrip_pattern) + "\n"
     fin.close()
     return text
 
@@ -605,13 +607,13 @@ def check_cwd():
                             + "not found.")
 
 
-def check_langcodes():
+def check_langcodes(langcodes):
     for langcode in langcodes:
         if langcode not in valid_langcodes:
             raise Exception(f"Error: Not a valid langcode: {langcode}")
 
 
-def summary_table():
+def summary_table(langcodes):
     sc = pd.read_csv(total_counts_sentences_file)
     wc = pd.read_csv(total_counts_words_file)
     if md_summary_table:
@@ -632,16 +634,16 @@ def summary_table():
 
 
 def main():
-    check_langcodes()
+    check_langcodes(run_langcodes)
     check_cwd()
     if os.path.exists(total_counts_sentences_file):
             os.remove(total_counts_sentences_file)
     if os.path.exists(total_counts_words_file):
             os.remove(total_counts_words_file)
-    for langcode in langcodes:
+    for langcode in run_langcodes:
         run_one_langcode(langcode, source_data_type)
     if get_summary_table:
-        summary_table()
+        summary_table(run_langcodes)
 
 
 ###############################################################################
