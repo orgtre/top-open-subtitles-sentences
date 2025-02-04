@@ -48,7 +48,8 @@ year_max = 2018   # largest: 2018
 # performance
 download_chunk_size = 1000000
 min_count = 5
-lines_per_chunk = 10000000
+n_process = 6
+spacy_n_process = n_process
 
 # finetuning
 original_language_only = False
@@ -240,7 +241,7 @@ def parse_rawdatadir_to_tmpfile(langcode, rawdatadir, tmpfile,
     yeardatadir = os.path.join(rawdatadir, f"OpenSubtitles/raw/{langcode}")
     fout = open(tmpfile, 'a', encoding='utf-8')
     
-    with ProcessPoolExecutor(max_workers=6) as executor:
+    with ProcessPoolExecutor(max_workers=n_process) as executor:
         for ydir in os.listdir(yeardatadir):
             if int(ydir) < year_min or int(ydir) > year_max:
                 continue
@@ -315,32 +316,50 @@ def text_from_xmlfile(infile):
     return ''.join(text_lines)
 
 
+def chunked_reader(file_path, lines_per_chunk):
+    with open(file_path, "r", encoding='utf-8') as f:
+        while True:
+            chunk = list(itertools.islice(f, lines_per_chunk))
+            if not chunk:
+                break
+            yield chunk
+     
+            
+def check_line_count(file_path):
+    with open(file_path, 'br') as f:
+        nlines = sum(1 for i in f)
+    if nlines == 0:
+        print(f"   No lines to process.")
+    else:
+        print(f"   processing {nlines} lines...")
+    return nlines
+
+
 def parsedfile_to_top_sentences(parsedfile, outfile,
                                 langcode, source_data_type):
     print("Getting top sentences:")
+    start = time.perf_counter()
     # Chunking is faster once the tmpfile is too large to fit in RAM
     # and only slightly slower when it fits in RAM.
     # The below section takes around 5min with 'es' and all years.
     if not os.path.exists("bld/top_sentences"):
         os.makedirs("bld/top_sentences")
-    with open(parsedfile, 'br') as f:
-        nlines = sum(1 for i in f)
-        if nlines == 0:
-            print(f"   No lines to process.")
-            return
-        else:
-            print(f"   processing {nlines} lines...")
+    nlines = check_line_count(parsedfile)
+    if nlines == 0:
+        return
+
     d = Counter()
     chunks_done = 0
-    with open(parsedfile, 'r', encoding='utf-8') as f:
-        for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
-                                           fillvalue=""):
-            if source_data_type != "raw":
-                lines = [l.strip(linestrip_pattern) for l in lines]
-            d += Counter(lines)
-            chunks_done += 1
-            print(f"   {chunks_done * min(nlines, lines_per_chunk)} " +
-                  "lines done")
+    for lines in chunked_reader(parsedfile, lines_per_chunk):
+        if source_data_type != "raw":
+            lines = [l.strip(linestrip_pattern) for l in lines]
+        d.update(lines)
+        chunks_done += 1
+        print(f"   {chunks_done * min(nlines, lines_per_chunk)} " +
+                "lines done")
+            
+    count_time = time.perf_counter() - start
+    print(f"   Done counting sentences in {count_time:.1f} seconds")
 
     # remove empty entries
     d.pop(None, None)
@@ -413,26 +432,24 @@ def collapse_if_only_ending_differently(df, sentence, count):
 
 def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
     print("Getting top words:")
+    start = time.perf_counter()
     if not os.path.exists("bld/top_words"):
-        os.makedirs("bld/top_words")
-    with open(parsedfile, 'br') as f:
-        nlines = sum(1 for i in f)
-        if nlines == 0:
-            print(f"   No lines to process.")
-            return
-        else:
-            print(f"   processing {nlines} lines...")
+        os.makedirs("bld/top_words")       
+    nlines = check_line_count(parsedfile)
+    if nlines == 0:
+        return
     d = Counter()
     chunks_done = 0
-    with open(parsedfile, 'r', encoding='utf-8') as f:
-        for lines in itertools.zip_longest(*[f] * min(nlines, lines_per_chunk),
-                                           fillvalue=""):
-            d += tokenize_lines_and_count(lines, langcode)
-            chunks_done += 1
-            print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
-                  + "lines done")
-            # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
-            # TODO parallelize            
+    for lines in chunked_reader(parsedfile, lines_per_chunk, nlines):
+        d.update(tokenize_lines(lines, langcode))
+        chunks_done += 1
+        print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
+                + "lines done")
+        # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
+        # TODO parallelize   
+            
+    count_time = time.perf_counter() - start
+    print(f"   Done tokenizing lines and counting words in {count_time:.1f} seconds")         
     
     # remove empty entries
     d.pop("", None)
@@ -477,28 +494,85 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
      .to_csv(outfile, index=False))
 
 
-def tokenize_lines_and_count(lines, langcode):
+current_spacy = None
+current_spacy_langcode = None
+spacy_n_process_original = spacy_n_process
+
+def get_spacy_pipeline(langcode):
+    
+    global current_spacy, current_spacy_langcode
+    global spacy_n_process, spacy_n_process_original
+    
+    lang_code_normalized = normalized_langcode(langcode)
+    
+    if current_spacy and current_spacy_langcode == lang_code_normalized:
+        return current_spacy
+    
+    import spacy
+    
+    model_mapping = {
+        #"zh": "zh_core_web_sm",
+    }
+    model_name = model_mapping.get(langcode)
+    if model_name:
+        return spacy.load(model_name)
+    
+    if langcode in ['zh_cn', 'zh_tw', 'ze_zh']:
+        cfg = {"segmenter": "jieba"}
+        nlp = spacy.blank(lang_code_normalized).from_config(
+            {"nlp": {"tokenizer": cfg}}
+        )
+        spacy_n_process = 1 # disable for Jieba
+    else:
+        nlp = spacy.blank(lang_code_normalized)
+        spacy_n_process = spacy_n_process_original
+        
+    current_spacy = nlp
+    current_spacy_langcode = lang_code_normalized
+        
+    return nlp
+
+
+def join_to_min_length(strings, n: int):
+    current_words: list[str] = []
+    current_length = 0
+
+    for word in strings:
+        if not current_words:
+            current_words.append(word)
+            current_length = len(word)
+        else:
+            new_length = current_length + 1 + len(word)
+            if new_length >= n:
+                yield ' '.join(current_words + [word])
+                current_words = []
+                current_length = 0
+            else:
+                current_words.append(word)
+                current_length = new_length
+
+    if current_words:
+        yield ' '.join(current_words)
+
+
+def tokenize_lines(lines, langcode):
+    if source_data_type == "text":
+        lines = (l.strip(linestrip_pattern) for l in lines)
     if source_data_type == "tokenized":
         # no tokenizer needed
         dt = map(lambda l: l.strip(linestrip_pattern).split(" "), lines)
     elif (use_regex_tokenizer
           or normalized_langcode(langcode) in langs_not_in_spacy):
         # use regex tokenizer
-        if source_data_type == "raw":
-            dt = map(lambda l: re.findall(regex_tokenizer_pattern, l), lines)
-        elif source_data_type == "text":
-            dt = map(lambda l: re.findall(regex_tokenizer_pattern,
-                                          l.strip(linestrip_pattern)), lines)
+        dt = map(lambda l: re.findall(regex_tokenizer_pattern, l), lines)
     else:
         # use spacy tokenizer
-        import spacy
-        nlp = spacy.blank(normalized_langcode(langcode))
-        if source_data_type == "raw":
-            dt = map(lambda l: [w.text.strip("-") for w in nlp(l)], lines)
-        elif source_data_type == "text":
-            dt = map(lambda l: [w.text.strip("-") for w in
-                                nlp(l.strip(linestrip_pattern))], lines)
-    return Counter(itertools.chain.from_iterable(dt))
+        nlp = get_spacy_pipeline(langcode)
+        big_lines = join_to_min_length(lines, 5_000)
+        docs = nlp.pipe(big_lines, n_process=spacy_n_process)
+        dt = map(lambda l: [w.text.strip("-") for w in l if not w.is_punct], docs)
+        
+    return itertools.chain.from_iterable(dt)
 
 
 def normalized_langcode(langcode):
