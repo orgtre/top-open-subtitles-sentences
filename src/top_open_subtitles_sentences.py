@@ -304,15 +304,15 @@ def check_if_original(infile, langcode):
 
 
 def text_from_xmlfile(infile):
-    fin = open(infile, 'r', encoding='utf-8')
-    text = ""    
-    for line in fin.readlines():
-        # xml and text content are on separate lines
-        if line.startswith('<') or line.startswith(' '):
-            continue
-        text += line.strip(linestrip_pattern) + "\n"
-    fin.close()
-    return text
+    text_lines = []
+    with open(infile, 'r', encoding='utf-8') as fin:
+        for line in fin:
+            if line.startswith(('<', ' ')):
+                continue
+            stripped_line = line.strip(linestrip_pattern)
+            if stripped_line:
+                text_lines.append(stripped_line + "\n")
+    return ''.join(text_lines)
 
 
 def parsedfile_to_top_sentences(parsedfile, outfile,
