@@ -317,10 +317,10 @@ def text_from_xmlfile(infile):
     return ''.join(text_lines)
 
 
-def batched(iterable, n: int):
+def batched(iterable, batch_size: int):
     it = iter(iterable)
     while True:
-        batch = tuple(itertools.islice(it, n))
+        batch = tuple(itertools.islice(it, batch_size))
         if not batch:
             return
         yield batch
@@ -584,7 +584,7 @@ def tokenize_lines(lines: list, langcode: str, get_spacy_pipeline):
 
 def tokenize_lines_mp(lines, langcode, executor: ProcessPoolExecutor):
 
-    lines_batched = batched(lines, int(lines_per_chunk/n_process))
+    lines_batched = batched(lines, int(lines_per_chunk/(n_process*25)))
     tokenize_func = partial(tokenize_lines, langcode=langcode, get_spacy_pipeline=get_spacy_pipeline)
     dt = itertools.chain.from_iterable(executor.map(tokenize_func, lines_batched))  
     return itertools.chain.from_iterable(dt)
