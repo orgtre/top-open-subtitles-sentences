@@ -1,6 +1,7 @@
 # Build the top-open-subtitles-sentences repository
 
 from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 import os
 import shutil
 import sys
@@ -48,8 +49,8 @@ year_max = 2018   # largest: 2018
 # performance
 download_chunk_size = 1000000
 min_count = 5
+lines_per_chunk = 10000000
 n_process = 6
-spacy_n_process = n_process
 
 # finetuning
 original_language_only = False
@@ -316,12 +317,18 @@ def text_from_xmlfile(infile):
     return ''.join(text_lines)
 
 
+def batched(iterable, n: int):
+    it = iter(iterable)
+    while True:
+        batch = tuple(itertools.islice(it, n))
+        if not batch:
+            return
+        yield batch
+
+
 def chunked_reader(file_path, lines_per_chunk):
     with open(file_path, "r", encoding='utf-8') as f:
-        while True:
-            chunk = list(itertools.islice(f, lines_per_chunk))
-            if not chunk:
-                break
+        for chunk in batched(f, lines_per_chunk):
             yield chunk
      
             
@@ -440,13 +447,14 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
         return
     d = Counter()
     chunks_done = 0
-    for lines in chunked_reader(parsedfile, lines_per_chunk, nlines):
-        d.update(tokenize_lines(lines, langcode))
-        chunks_done += 1
-        print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
-                + "lines done")
-        # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines)
-        # TODO parallelize   
+    with ProcessPoolExecutor(max_workers=n_process) as executor:
+        for lines in chunked_reader(parsedfile, lines_per_chunk):
+            tokenized_lines = tokenize_lines_mp(lines, langcode, executor)
+            d.update(tokenized_lines)
+            chunks_done += 1
+            print(f"   {chunks_done * min(nlines, lines_per_chunk)} "
+                    + "lines done")
+            # 6 min per 10,000,000 lines ("nl" has 107,000,000 lines) 
             
     count_time = time.perf_counter() - start
     print(f"   Done tokenizing lines and counting words in {count_time:.1f} seconds")         
@@ -496,12 +504,10 @@ def parsedfile_to_top_words(parsedfile, outfile, langcode, source_data_type):
 
 current_spacy = None
 current_spacy_langcode = None
-spacy_n_process_original = spacy_n_process
 
 def get_spacy_pipeline(langcode):
     
     global current_spacy, current_spacy_langcode
-    global spacy_n_process, spacy_n_process_original
     
     lang_code_normalized = normalized_langcode(langcode)
     
@@ -518,14 +524,14 @@ def get_spacy_pipeline(langcode):
         return spacy.load(model_name)
     
     if langcode in ['zh_cn', 'zh_tw', 'ze_zh']:
+        import jieba
+        jieba.setLogLevel(20)
         cfg = {"segmenter": "jieba"}
         nlp = spacy.blank(lang_code_normalized).from_config(
             {"nlp": {"tokenizer": cfg}}
         )
-        spacy_n_process = 1 # disable for Jieba
     else:
         nlp = spacy.blank(lang_code_normalized)
-        spacy_n_process = spacy_n_process_original
         
     current_spacy = nlp
     current_spacy_langcode = lang_code_normalized
@@ -553,25 +559,34 @@ def join_to_min_length(strings, n: int):
 
     if current_words:
         yield ' '.join(current_words)
+        
 
-
-def tokenize_lines(lines, langcode):
+def tokenize_lines(lines: list, langcode: str, get_spacy_pipeline):
     if source_data_type == "text":
         lines = (l.strip(linestrip_pattern) for l in lines)
     if source_data_type == "tokenized":
         # no tokenizer needed
-        dt = map(lambda l: l.strip(linestrip_pattern).split(" "), lines)
+        dt = [l.strip(linestrip_pattern).split(" ") for l in lines]
     elif (use_regex_tokenizer
           or normalized_langcode(langcode) in langs_not_in_spacy):
         # use regex tokenizer
-        dt = map(lambda l: re.findall(regex_tokenizer_pattern, l), lines)
+        dt = [re.findall(regex_tokenizer_pattern, l) for l in lines]
     else:
         # use spacy tokenizer
         nlp = get_spacy_pipeline(langcode)
         big_lines = join_to_min_length(lines, 5_000)
-        docs = nlp.pipe(big_lines, n_process=spacy_n_process)
-        dt = map(lambda l: [w.text.strip("-") for w in l if not w.is_punct], docs)
+        dt = [
+            [w.text.strip("-") for w in doc if not w.is_punct]
+            for doc in nlp.pipe(big_lines, n_process=1)
+        ]
         
+    return dt
+
+def tokenize_lines_mp(lines, langcode, executor: ProcessPoolExecutor):
+
+    lines_batched = batched(lines, int(lines_per_chunk/n_process))
+    tokenize_func = partial(tokenize_lines, langcode=langcode, get_spacy_pipeline=get_spacy_pipeline)
+    dt = itertools.chain.from_iterable(executor.map(tokenize_func, lines_batched))  
     return itertools.chain.from_iterable(dt)
 
 
